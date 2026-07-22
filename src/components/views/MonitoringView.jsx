@@ -1,0 +1,36 @@
+import { Building2, Camera, Edit3, FileDown, Link, QrCode, Search, User } from 'lucide-react';
+import React from 'react';
+import { formatCurrency, formatDisplayDate, getSafeDateString, safeString } from '../../utils/helpers';
+import { exportLabelWord } from '../../utils/exportLabelWord';
+
+const MonitoringView = ({ activeMonitoringData, data, handleExportRekapPengguna, isDarkMode, isReadOnly, monitoringSelectedYear, priceData, setEditNilaiModal, setLinkAsetModal, setMonitoringSearch, setMonitoringSelectedYear, setPhotoModal, templates }) => {
+  return (
+    <div className={`rounded-[2rem] md:rounded-[3rem] shadow-xl border overflow-hidden flex flex-col h-[80vh] ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}>
+               <div className={`p-6 md:p-8 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0 ${isDarkMode ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50'}`}>
+                  <h3 className="font-black text-xl">Monitoring Nilai Buku & Aset</h3>
+                  <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                      <select value={monitoringSelectedYear} onChange={e=>setMonitoringSelectedYear(e.target.value)} className={`p-2 md:p-3 border rounded-xl font-bold outline-none text-sm focus:border-emerald-500 ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-slate-50'}`}>
+                          <option value="Semua">Semua Tahun</option>
+                          {Array.from({length: 15}, (_, i) => new Date().getFullYear() - 10 + i).map(y => <option key={y} value={y.toString()}>{y}</option>)}
+                      </select>
+                      <button onClick={handleExportRekapPengguna} className="px-4 py-2 md:py-3 bg-blue-100 hover:bg-blue-200 text-blue-600 font-bold rounded-xl flex items-center gap-2 transition-colors whitespace-nowrap"><FileDown size={16}/><span className="hidden md:inline">Rekap Excel</span></button>
+                      <div className="relative w-full md:w-auto"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16}/><input type="text" placeholder="Cari aset..." className={`w-full md:w-64 pl-10 pr-4 py-2 md:py-3 rounded-xl border outline-none text-sm focus:border-emerald-500 ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white'}`} onChange={e => setMonitoringSearch(e.target.value)} /></div>
+                  </div>
+               </div>
+               <div className="p-0 md:p-4 flex-grow overflow-auto custom-scrollbar">
+                  <table className="w-full text-left min-w-[1200px]">
+                     <thead className={`sticky top-0 z-10 ${isDarkMode ? 'bg-slate-800' : 'bg-white'}`}><tr className={`text-[10px] md:text-xs font-black text-slate-400 border-b ${isDarkMode ? 'border-slate-700' : ''}`}><th className="p-4">Aset & Kode</th><th className="p-4">Lokasi / Pemegang</th><th className="p-4 text-center">Nilai Perolehan</th><th className="p-4 text-center">Nilai Buku (Rp)</th><th className="p-4 text-center">Tgl Pengadaan</th><th className="p-4 text-center">Masa Pakai</th><th className="p-4 text-center">Label / Foto</th><th className="p-4 text-center">Status</th><th className="p-4 text-center">Aksi / Edit</th></tr></thead>
+                     <tbody className={`divide-y ${isDarkMode ? 'divide-slate-700' : ''}`}>
+                        {activeMonitoringData.map((it, i) => {
+                           const locName = it.pemegang !== '-' ? safeString(it.pemegang) : (it.ruangan !== '-' ? safeString(it.ruangan) : safeString(it.lokasi || 'N/A'));
+                           return (
+                           <tr key={i} className={isDarkMode ? 'hover:bg-slate-700/50' : 'hover:bg-slate-50'}><td className="p-4"><p className="font-bold text-sm">{safeString(it.nama)}</p><p className="text-[10px] md:text-xs text-slate-400 font-mono mt-1">{safeString(it.no_kartu)}</p></td><td className="p-4 text-xs md:text-sm text-slate-500"><div className="flex items-center gap-2">{it.pemegang !== '-' ? (<div className="flex flex-col"><span className="flex items-center gap-1 font-bold text-emerald-600"><User size={12}/>{safeString(it.pemegang)}</span><span className="text-[10px] font-medium text-slate-400 mt-0.5">{safeString(it.skpd)}</span></div>) : (it.ruangan !== '-' ? <span className="flex items-center gap-1 font-bold text-indigo-500"><Building2 size={12}/>{safeString(it.ruangan)}</span> : <span>{safeString(it.lokasi || '-')}</span>)}{!isReadOnly && <button onClick={() => setLinkAsetModal({show: true, item: it})} className="text-emerald-500 p-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 rounded" title="Ubah & Hubungkan Lokasi"><Link size={14}/></button>}</div></td><td className="p-4 text-center text-sm font-bold text-slate-500">{formatCurrency(it.nilai_perolehan || 0)}</td><td className="p-4 text-center text-sm font-bold text-slate-600 dark:text-slate-300">{formatCurrency(it.nilai_buku || 0)}</td><td className="p-4 text-center text-xs font-medium text-slate-500">{formatDisplayDate(getSafeDateString(it.tgl_pengadaan))}</td><td className="p-4 text-center text-xs">{it.isExpired ? <span className="text-red-500 font-bold">Habis</span> : <div className="flex flex-col items-center justify-center gap-1"><span className="text-slate-500 whitespace-nowrap">{formatDisplayDate(getSafeDateString(it.tgl_habis))}</span><span className="text-emerald-600 font-black px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-full">{it.diffDays} Hari</span></div>}</td><td className="p-4 text-center"><div className="flex justify-center gap-2"><button onClick={() => exportLabelWord(it, locName, priceData, templates, data)} className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 rounded-lg" title="Cetak Label (Word)"><QrCode size={14}/></button>{it.photoBase64 ? <button onClick={()=>setPhotoModal({show:true, item:it, preview:safeString(it.photoBase64), file:null})} className="text-[10px] md:text-xs text-blue-600 font-bold bg-blue-50 dark:bg-blue-900/30 px-2 rounded">Foto</button> : (!isReadOnly ? <button onClick={()=>setPhotoModal({show:true, item:it, preview:null, file:null})} className="text-slate-400 p-2 border border-transparent hover:border-emerald-200 rounded"><Camera size={16}/></button> : <Camera size={16} className="text-slate-400 mx-auto"/>)}</div></td><td className="p-4 text-center"><span className={`px-2 md:px-3 py-1 rounded-full text-[8px] md:text-[10px] font-black ${it.manual_active ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'}`}>{it.manual_active ? 'RE-AKTIF' : 'AKTIF'}</span></td><td className="p-4 text-center">{!isReadOnly && <button onClick={()=>setEditNilaiModal({show: true, item: it})} className="text-xs font-bold text-blue-600 p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg hover:bg-blue-100" title="Edit Nilai Buku/Masa Pakai"><Edit3 size={16}/></button>}</td></tr>
+                           )})}
+                     </tbody>
+                  </table>
+               </div>
+            </div>
+  );
+};
+
+export default MonitoringView;
