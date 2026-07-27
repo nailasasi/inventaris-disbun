@@ -3,6 +3,7 @@ import React from 'react';
 import { safeString } from '../../utils/helpers';
 import { exportLabelWord } from '../../utils/exportLabelWord';
 
+
 const DataAsetView = ({ confirmDelete, data, handleExportBulkLabel, handleExportWordSPPBI, handleSearchChange, isDarkMode, isPegawaiEditable, modals, priceData, searchTerm, selectedUser, setModals, setPhotoModal, setTransferItem, setTransferUnitModal, templates }) => {
   return (
     <div className="space-y-8">

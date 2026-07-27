@@ -1,6 +1,28 @@
 // Fungsi utilitas umum (format, parsing tanggal, kalkulasi nilai buku, dsb)
 import { DEFAULT_MASA_MANFAAT } from '../config/constants';
 
+const formatUploadDate = (timestamp) => {
+    if (!timestamp) return "-";
+
+    try {
+        let date;
+
+        if (timestamp.toDate) {
+            date = timestamp.toDate();
+        } else {
+            date = new Date(timestamp);
+        }
+
+        return new Intl.DateTimeFormat("id-ID", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+        }).format(date);
+    } catch {
+        return "-";
+    }
+};
+
 const safeString = (v) => (v === undefined || v === null || v === 'undefined') ? '' : String(v);
 
 const loadScripts = async () => {
@@ -84,3 +106,21 @@ const getSafeDateString = (dateVal) => {
 };
 
 export { safeString, loadScripts, formatCurrency, parseDateRobust, parseKodeBarangData, calculateNilaiBuku, formatDisplayDate, getSafeDateString };
+
+export function formatRupiah(value) {
+
+    return Number(
+        value || 0
+    ).toLocaleString("id-ID");
+
+}
+
+export function ambilTahun(value) {
+
+    if (!value) return "-";
+
+    const match = String(value).match(/\d{4}/);
+
+    return match ? match[0] : value;
+
+}

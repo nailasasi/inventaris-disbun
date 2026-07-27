@@ -32,6 +32,11 @@ import MonitoringView from './components/views/MonitoringView';
 import PenghapusanView from './components/views/PenghapusanView';
 import UlasanView from './components/views/UlasanView';
 import LaporanView from './components/views/LaporanView';
+import { exportDocx } from "./utils/exportDocx";
+import {
+    formatRupiah
+} from "./utils/helpers";
+import { buildBarangData } from "./utils/exportHelpers";
 const App = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -1407,10 +1412,45 @@ const App = () => {
           customAlert("Berhasil", "Semua data berhasil tersimpan.");
       } catch (e) { customAlert("Gagal", "Kesalahan saat menyimpan."); } setStatus({ ...status, loading: false });
   };
-  const handleTemplateUpload = (e, type) => {
-      const file = e.target.files[0]; if(!file) return; const reader = new FileReader();
-      reader.onload = async (ev) => { setStatus({...status, loading: true}); try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'templates_doc', activeUnitView), { [type]: ev.target.result, updatedAt: serverTimestamp() }, {merge: true}); customAlert("Berhasil", `Template diperbarui!`); } catch(err) {} setStatus({...status, loading: false}); e.target.value = ''; }; reader.readAsText(file);
-  };
+  const handleTemplateUpload = async (e, type) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setStatus((prev) => ({ ...prev, loading: true }));
+
+    try {
+        const downloadURL = await uploadToCloudinary(file);
+
+        await setDoc(
+            doc(
+                db,
+                "artifacts",
+                appId,
+                "public",
+                "data",
+                "templates_doc",
+                activeUnitView
+            ),
+            {
+                [type]: {
+                    url: downloadURL,
+                    fileName: file.name,
+                    fileType: file.type,
+                    updatedAt: serverTimestamp()
+                }
+            },
+            { merge: true }
+        );
+
+        customAlert("Berhasil", "Template berhasil diperbarui!");
+    } catch (err) {
+        console.error(err);
+        customAlert("Gagal", err.message);
+    }
+
+    setStatus((prev) => ({ ...prev, loading: false }));
+    e.target.value = "";
+};
   const handleUploadRkbmdTemplate = (e) => {
       const file = e.target.files[0]; if(!file || !window.XLSX) return; const reader = new FileReader();
       reader.onload = (ev) => { const wb = window.XLSX.read(ev.target.result, {type: 'binary'}); const ws = wb.Sheets[wb.SheetNames[0]]; const headers = window.XLSX.utils.sheet_to_json(ws, {header: 1})[0]; setRkbmdTemplateHeaders(headers); customAlert("Template Aktif", "Format Excel dimuat."); }; reader.readAsBinaryString(file);
@@ -1494,43 +1534,117 @@ const App = () => {
       setStatus({ ...status, loading: false });
   };
   const handleExportTanah = () => {
-      if (!window.XLSX) return customAlert("Tunggu", "Loading Excel...");
-      const rows = filteredTanahDataForView.map(t => ({ 
-          "KIB / Nomor": safeString(t.kib), "Deskripsi / Jenis": safeString(t.deskripsi), "Tgl Peroleh": getSafeDateString(t.tgl_peroleh).split('T')[0], 
-          "Luas (m2)": safeString(t.luas), "Alamat Lengkap": safeString(t.alamat), "Status Hak": safeString(t.status_hak), 
-          "Penggunaan": safeString(t.penggunaan), "Petugas PIC": safeString(t.petugas), "Telp": safeString(t.tlp_petugas),
-          "Biaya Pengurusan/Thn": safeString(t.biaya_pengurusan), "Penerimaan PAD/Thn": safeString(t.penerimaan_pad),
-          "Tarif Retribusi": safeString(t.tarif_retribusi), "Satuan Tarif": safeString(t.satuan_tarif), "Total Tarif Jika Disewakan": safeString(t.total_tarif)
-      }));
-      const ws = window.XLSX.utils.json_to_sheet(rows); const wb = window.XLSX.utils.book_new(); window.XLSX.utils.book_append_sheet(wb, ws, "Tanah"); window.XLSX.writeFile(wb, `Inventaris_Tanah_${UNIT_LABELS[activeUnitView].replace(/ /g, '_')}.xlsx`);
-  };
-  const handleExportWordSPPBI = (single) => {
-      let targets = single ? [single] : (filteredPegawaiData || []).filter(p => p.items && p.items.length > 0);
-      if (targets.length === 0) return customAlert("Kosong", "Data kosong.");
-      let html = '';
-      if (!templates.sppbi) { html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><style>body{font-family:'Times New Roman';font-size:12pt}table{border-collapse:collapse;width:100%;margin-bottom:20px}th,td{border:1px solid #000;padding:5px}</style></head><body>`; }
-      targets.forEach((p, i) => {
-         let userItemsToShow = p.items || [];
-         userItemsToShow = userItemsToShow.filter(it => !safeString(it.nama).toUpperCase().includes("DINAS PERKEBUNAN"));
-         if (userItemsToShow.length === 0) return;
-         let tableRows = userItemsToShow.map((it,idx) => {
-             let pItem = Object.values(priceData || {}).find(x => safeString(x.no_kartu) === safeString(it.no_kartu) && safeString(it.no_kartu) !== '');
-             if (!pItem) pItem = Object.values(priceData || {}).find(x => safeString(x.nama).toLowerCase() === safeString(it.nama).toLowerCase() && safeString(x.lokasi).toLowerCase() === safeString(p.nama).toLowerCase());
-             const mergedNoKartu = it.no_kartu || pItem?.no_kartu || '-'; const mergedTahun = it.tahun || pItem?.tgl_pengadaan || pItem?.tahun || '-'; const mergedMerk = (it.merk && it.merk !== '-') ? it.merk : (pItem?.merk || '-');
-             return `<tr><td style="text-align:center">${idx+1}</td><td>${safeString(mergedNoKartu)}</td><td>${safeString(it.nama)}</td><td>${safeString(mergedMerk)}</td><td style="text-align:center">${safeString(mergedTahun)}</td></tr>`;
-         }).join('');
-         if (templates.sppbi) {
-             if (i > 0) html += `<br style="page-break-before:always">`;
-             html += templates.sppbi.replace(/\{\{NAMA\}\}/g, safeString(p.nama)).replace(/\{\{NIP\}\}/g, safeString(p.nip)).replace(/\{\{JABATAN\}\}/g, safeString(p.jabatan)).replace(/\{\{TABLE_ROWS\}\}/g, tableRows).replace(/\{\{TANGGAL\}\}/g, new Date().toLocaleDateString('id-ID'));
-         } else {
-             if (i > 0) html += `<br style="page-break-before:always">`;
-             html += `<h3 style="text-align:center">SURAT PERNYATAAN PENGUASAAN BARANG INVENTARIS (SPPBI)</h3><p>Nama: ${safeString(p.nama)}<br>NIP: ${safeString(p.nip)}<br>Jabatan: ${safeString(p.jabatan)}</p><p>Bertanggung jawab penuh atas barang-barang berikut:</p><table><thead><tr><th>No</th><th>No Kartu</th><th>Nama Barang</th><th>Merk</th><th>Tahun</th></tr></thead><tbody>${tableRows}</tbody></table><br><br><p style="text-align:right">Surabaya, ${new Date().toLocaleDateString('id-ID')}<br><br><br><b>${safeString(p.nama)}</b></p>`;
-         }
-      });
-      if (!templates.sppbi) html += `</body></html>`;
-      const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
-      if (window.saveAs) window.saveAs(blob, "SPPBI.doc"); else { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "SPPBI.doc"; a.click(); }
-  };
+                if (!window.XLSX) return customAlert("Tunggu", "Loading Excel...");
+                const rows = filteredTanahDataForView.map(t => ({ 
+                    "KIB / Nomor": safeString(t.kib), "Deskripsi / Jenis": safeString(t.deskripsi), "Tgl Peroleh": getSafeDateString(t.tgl_peroleh).split('T')[0], 
+                    "Luas (m2)": safeString(t.luas), "Alamat Lengkap": safeString(t.alamat), "Status Hak": safeString(t.status_hak), 
+                    "Penggunaan": safeString(t.penggunaan), "Petugas PIC": safeString(t.petugas), "Telp": safeString(t.tlp_petugas),
+                    "Biaya Pengurusan/Thn": safeString(t.biaya_pengurusan), "Penerimaan PAD/Thn": safeString(t.penerimaan_pad),
+                    "Tarif Retribusi": safeString(t.tarif_retribusi), "Satuan Tarif": safeString(t.satuan_tarif), "Total Tarif Jika Disewakan": safeString(t.total_tarif)
+                }));
+                const ws = window.XLSX.utils.json_to_sheet(rows); const wb = window.XLSX.utils.book_new(); window.XLSX.utils.book_append_sheet(wb, ws, "Tanah"); window.XLSX.writeFile(wb, `Inventaris_Tanah_${UNIT_LABELS[activeUnitView].replace(/ /g, '_')}.xlsx`);
+            };
+
+            const handleExportBastBarang = () => {
+                customAlert(
+                    "Dalam Pengembangan",
+                    "Export BAST Barang belum diimplementasikan."
+                );
+            };
+
+            const handleExportBastKendaraan = () => {
+                customAlert(
+                    "Dalam Pengembangan",
+                    "Export BAST Kendaraan belum diimplementasikan."
+                );
+            };
+
+            const handleExportSPPKD = () => {
+                customAlert(
+                    "Dalam Pengembangan",
+                    "Export SPPKD belum diimplementasikan."
+                );
+            };
+            
+            const handleExportWordSPPBI = async (single) => {
+            
+    try {
+        const targets = single
+            ? [single]
+            : (filteredPegawaiData || []).filter(
+                p => p.items && p.items.length > 0
+            );
+
+        if (targets.length === 0) {
+            return customAlert(
+                "Kosong",
+                "Data kosong."
+            );
+        }
+
+        const tanggalLengkap =
+        new Intl.DateTimeFormat(
+            "id-ID",
+            {
+                day: "numeric",
+                month: "long",
+                year: "numeric"
+            }
+        ).format(new Date());
+
+        for (const p of targets) {
+            let userItemsToShow = p.items || [];
+
+            userItemsToShow = userItemsToShow.filter(
+                it =>
+                    !safeString(it.nama)
+                        .toUpperCase()
+                        .includes("DINAS PERKEBUNAN")
+            );
+
+            if (userItemsToShow.length === 0) {
+                continue;
+            }
+
+            const barang = buildBarangData(
+                userItemsToShow,
+                priceData,
+                p,
+                safeString
+            );
+
+            const data = {
+                nama_asn: safeString(p.nama),
+                nip_asn: safeString(p.nip),
+                jabatan_asn: safeString(p.jabatan),
+                tanggal_lengkap: tanggalLengkap,
+                barang
+            };
+
+            if (!templates.sppbi?.url) {
+                customAlert(
+                    "Template belum ada",
+                    "Silakan upload template SPPBI terlebih dahulu."
+                );
+                return;
+            }
+
+            console.log("DATA UNTUK TEMPLATE", data);
+
+            await exportDocx(
+                templates.sppbi.url,
+                data,
+                `SPPBI - ${safeString(p.nama)}.docx`
+            );
+        }
+    } catch (err) {
+        console.error(err);
+        customAlert(
+            "Export gagal",
+            err.message || "Terjadi kesalahan saat membuat dokumen."
+        );
+    }
+};
   const handleExportKIRWord = (roomName) => {
        const roomData = (filteredRuanganData || []).find(r => r.nama_ruangan === roomName);
        if (!roomData || !roomData.items || roomData.items.length === 0) return customAlert("Kosong", "Data kosong.");
@@ -1879,7 +1993,27 @@ const App = () => {
          )}
          {/* --- Laporan --- */}
          {activeTab === 'laporan' && (
-            <LaporanView activeUnitView={activeUnitView} customConfirm={customConfirm} handleExportExcel={handleExportExcel} handleExportWordSPPBI={handleExportWordSPPBI} handleTemplateUpload={handleTemplateUpload} isDarkMode={isDarkMode} isReadOnly={isReadOnly} modals={modals} selectedYear={selectedYear} setModals={setModals} setSelectedYear={setSelectedYear} setStatus={setStatus} status={status} templates={templates} />
+           <LaporanView
+            activeUnitView={activeUnitView}
+            customConfirm={customConfirm}
+            handleExportExcel={handleExportExcel}
+            handleExportWordSPPBI={handleExportWordSPPBI}
+
+            handleExportBastBarang={handleExportBastBarang}
+            handleExportBastKendaraan={handleExportBastKendaraan}
+            handleExportSPPKD={handleExportSPPKD}
+
+            handleTemplateUpload={handleTemplateUpload}
+            isDarkMode={isDarkMode}
+            isReadOnly={isReadOnly}
+            modals={modals}
+            selectedYear={selectedYear}
+            setModals={setModals}
+            setSelectedYear={setSelectedYear}
+            setStatus={setStatus}
+            status={status}
+            templates={templates}
+        />
          )}
       </main>
       {/* --- Global Modals --- */}
