@@ -124,3 +124,54 @@ export function ambilTahun(value) {
     return match ? match[0] : value;
 
 }
+
+export const capitalize = (text) => {
+    if (!text) return "";
+    return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+export const terbilang = (nilai) => {
+    const angka = [
+        "", "satu", "dua", "tiga", "empat",
+        "lima", "enam", "tujuh", "delapan", "sembilan",
+        "sepuluh", "sebelas"
+    ];
+
+    nilai = parseInt(nilai, 10);
+
+    if (nilai < 12) {
+        return angka[nilai];
+    } else if (nilai < 20) {
+        return terbilang(nilai - 10) + " belas";
+    } else if (nilai < 100) {
+        return (
+            terbilang(Math.floor(nilai / 10)) +
+            " puluh " +
+            terbilang(nilai % 10)
+        ).trim();
+    } else if (nilai < 200) {
+        return "seratus " + terbilang(nilai - 100);
+    } else if (nilai < 1000) {
+        return (
+            terbilang(Math.floor(nilai / 100)) +
+            " ratus " +
+            terbilang(nilai % 100)
+        ).trim();
+    } else if (nilai < 2000) {
+        return "seribu " + terbilang(nilai - 1000);
+    } else if (nilai < 1000000) {
+        return (
+            terbilang(Math.floor(nilai / 1000)) +
+            " ribu " +
+            terbilang(nilai % 1000)
+        ).trim();
+    } else if (nilai < 1000000000) {
+        return (
+            terbilang(Math.floor(nilai / 1000000)) +
+            " juta " +
+            terbilang(nilai % 1000000)
+        ).trim();
+    }
+
+    return "";
+}

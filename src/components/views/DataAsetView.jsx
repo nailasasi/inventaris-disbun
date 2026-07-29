@@ -2,6 +2,7 @@ import { ArrowRightLeft, Camera, CheckSquare, ClipboardCheck, Database, FileText
 import React from 'react';
 import { safeString } from '../../utils/helpers';
 import { exportLabelWord } from '../../utils/exportLabelWord';
+import { exportLabelExcel } from '../../utils/exportLabelExcel';
 
 
 const DataAsetView = ({ confirmDelete, data, handleExportBulkLabel, handleExportWordSPPBI, handleSearchChange, isDarkMode, isPegawaiEditable, modals, priceData, searchTerm, selectedUser, setModals, setPhotoModal, setTransferItem, setTransferUnitModal, templates }) => {
@@ -46,7 +47,24 @@ const DataAsetView = ({ confirmDelete, data, handleExportBulkLabel, handleExport
                                        <td className="py-4 font-bold text-sm">{safeString(it.nama)}<br/><span className="text-[10px] md:text-xs font-normal text-slate-400">{safeString(mergedItem.merk)} | {safeString(mergedItem.tahun)}</span></td>
                                        <td className="py-4 text-xs md:text-sm font-mono text-slate-500">{safeString(mergedItem.no_kartu)}</td>
                                        <td className="py-4 text-center flex justify-center gap-1 md:gap-2">
-                                           <button onClick={() => exportLabelWord(mergedItem, selectedUser.nama, priceData, templates, data)} className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 rounded-lg transition-colors" title="Cetak Label (Word)"><QrCode size={14}/></button>
+                                           <button
+                                             onClick={() => {
+                                                console.log("BUTTON LABEL DIKLIK");
+
+                                                exportLabelExcel(
+                                                      templates.label.url,
+                                                      [mergedItem],
+                                                      selectedUser.nama,
+                                                      priceData,
+                                                      data,
+                                                      safeString
+                                                );
+                                             }}
+                                             className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 rounded-lg transition-colors"
+                                             title="Cetak Label (Excel)"
+                                          >
+                                             <QrCode size={14} />
+                                          </button>
                                            {isPegawaiEditable && <button onClick={() => { setTransferItem(mergedItem); setModals({...modals, transfer: true}); }} className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 dark:bg-blue-900/30 rounded-lg transition-colors" title="Mutasi Internal (Antar Pegawai)"><ArrowRightLeft size={14}/></button>}
                                            {isPegawaiEditable && <button onClick={() => { setTransferUnitModal({show: true, item: mergedItem, sourceRef: selectedUser.nip, sourceType: 'pegawai'}); }} className="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 rounded-lg transition-colors" title="Mutasi Antar Unit"><Send size={14}/></button>}
                                            {isPegawaiEditable && <button onClick={() => confirmDelete(it, 'pegawai')} className="p-2 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-900/30 rounded-lg transition-colors"><Trash2 size={14}/></button>}

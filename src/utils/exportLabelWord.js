@@ -25,6 +25,11 @@ const exportLabelWord = (item, locationStr = '', priceData = {}, templates = {},
         } else namaSkpd = '-';
     }
     const namaDinas = "DINAS PERKEBUNAN PROV. JATIM";
+
+    console.log("templates =", templates);
+    console.log("templates.label =", templates.label);
+    console.log("typeof =", typeof templates.label);
+    
     let htmlContent = templates.label ? templates.label
         .replace(/\{\{NAMA_BARANG\}\}/g, safeString(item.nama) || 'N/A')
         .replace(/\{\{MERK\}\}/g, finalMerk)

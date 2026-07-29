@@ -33,10 +33,12 @@ import PenghapusanView from './components/views/PenghapusanView';
 import UlasanView from './components/views/UlasanView';
 import LaporanView from './components/views/LaporanView';
 import { exportDocx } from "./utils/exportDocx";
-import {
-    formatRupiah
-} from "./utils/helpers";
-import { buildBarangData } from "./utils/exportHelpers";
+import { exportLabelExcel } from "./utils/exportLabelExcel";
+import {formatRupiah} from "./utils/helpers";
+import { buildBarangData,buildBastBarangData} from "./utils/exportHelpers";
+import { buildBastKendaraanData} from "./utils/exportHelpers";
+import { terbilang, capitalize } from "./utils/helpers";
+
 const App = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -157,33 +159,79 @@ const App = () => {
   const customAlert = (title, message) => setConfirmModal({ show: true, title: safeString(title), message: safeString(message), type: 'info', isAlert: true });
   const customConfirm = (title, message, type, onConfirm) => setConfirmModal({ show: true, title: safeString(title), message: safeString(message), type: safeString(type), isAlert: false, onConfirm });
   
-  const generateBAST = (item, sender, receiver) => {
-      const content = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'></head><body>
-      <h3 style="text-align:center">BERITA ACARA SERAH TERIMA BARANG (MUTASI INTERNAL)</h3>
-      <p>Pada hari ini, tanggal ${new Date().toLocaleDateString('id-ID')}, telah diserahkan barang inventaris dengan rincian:</p>
-      <ul>
-          <li><b>Nama Barang:</b> ${safeString(item.nama)}</li>
-          <li><b>No Kartu:</b> ${safeString(item.no_kartu)}</li>
-      </ul>
-      <p>Dari Pihak Pertama:</p>
-      <p><b>Nama:</b> ${safeString(sender.nama)}<br/><b>NIP:</b> ${safeString(sender.nip)}</p>
-      <p>Kepada Pihak Kedua:</p>
-      <p><b>Nama:</b> ${safeString(receiver.nama)}<br/><b>NIP:</b> ${safeString(receiver.nip)}</p>
-      <br><br>
-      <table style="width:100%; border:none; text-align:center;">
-        <tr>
-          <td style="width:50%">Yang Menerima,<br><br><br><br><b>${safeString(receiver.nama)}</b></td>
-          <td style="width:50%">Yang Menyerahkan,<br><br><br><br><b>${safeString(sender.nama)}</b></td>
-        </tr>
-      </table>
-      </body></html>
-      `;
-      const blob = new Blob(['\ufeff', content], { type: 'application/msword' });
-      if (window.saveAs) window.saveAs(blob, `BAST_Internal_${safeString(item.no_kartu).replace(/[^a-zA-Z0-9.-]/g, '_')}.doc`);
-      else { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `BAST_Internal_${safeString(item.no_kartu).replace(/[^a-zA-Z0-9.-]/g, '_')}.doc`; a.click(); }
-  };
+  const generateBAST = async (item, sender, receiver) => {
+    try {
+        
+        if (!templates.bast_barang?.url) {
+
+             console.log("SEMUA TEMPLATE:", templates);
+             console.log("TEMPLATE BAST:", templates?.bast);
+
+            customAlert(
+                "Template belum ada",
+                "Silakan upload template BAST terlebih dahulu."
+            );
+            return;
+           
+        }
+
+        const sekarang = new Date();
+
+        const hari = sekarang.toLocaleDateString("id-ID", {
+            weekday: "long"
+        });
+
+        const bulan = sekarang.toLocaleDateString("id-ID", {
+            month: "long"
+        });
+
+        const tahun = sekarang.getFullYear();
+
+        const barang = buildBastBarangData(
+            [item],
+            priceData,
+            sender,
+            safeString
+        );
+
+        const dataTemplate = {
+                
+            nama_pihak_pertama: safeString(sender.nama),
+            nip_pihak_pertama: safeString(sender.nip),
+            jabatan_pihak_pertama: safeString(sender.jabatan),
+
+            nama_pihak_kedua: safeString(receiver.nama),
+            nip_pihak_kedua: safeString(receiver.nip),
+            jabatan_pihak_kedua: safeString(receiver.jabatan),
+
+            hari,
+            tanggal_terbilang: capitalize(terbilang(sekarang.getDate())),
+            bulan,       
+            tahun_terbilang: capitalize(terbilang(tahun)),
+            barang
+
+        };
+
+        console.log("DATA BAST", dataTemplate);
+
+        await exportDocx(
+            templates.bast_barang.url,
+            dataTemplate,
+            `BAST - ${safeString(item.nama)} - ${safeString(sender.nama)}.docx`
+        );
+        
+    } catch (err) {
+
+        console.error(err);
+
+        customAlert(
+            "Export gagal",
+            err.message || "Terjadi kesalahan saat membuat BAST."
+        );
+
+    }
+};
+
   const generateBASTAntarUnit = (item, sourceUnit, targetUnit, senderPegawai) => {
       const content = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -205,59 +253,174 @@ const App = () => {
       if (window.saveAs) window.saveAs(blob, `BAST_AntarUnit_${safeString(item.no_kartu).replace(/[^a-zA-Z0-9.-]/g, '_')}.doc`);
       else { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `BAST_AntarUnit_${safeString(item.no_kartu).replace(/[^a-zA-Z0-9.-]/g, '_')}.doc`; a.click(); }
   };
-  const handleExportBulkLabel = (items, defaultLocation = 'Kumpulan Aset') => {
-      if (!items || items.length === 0) return customAlert("Kosong", "Tidak ada aset untuk dicetak labelnya.");
-      
-      let rowsHtml = '';
-      items.forEach((it, index) => {
-          let pItem = Object.values(priceData || {}).find(x => safeString(x.no_kartu) === safeString(it.no_kartu) && safeString(it.no_kartu) !== '');
-          if (!pItem) pItem = Object.values(priceData || {}).find(x => safeString(x.nama).toLowerCase() === safeString(it.nama).toLowerCase() && (safeString(x.lokasi).toLowerCase() === safeString(it.pemegang).toLowerCase() || safeString(x.lokasi).toLowerCase() === safeString(it.ruangan).toLowerCase()));
-          
-          let finalNoKartu = safeString(it.no_kartu); 
-          let finalMerk = safeString(it.merk);
-          if (!finalNoKartu || finalNoKartu === '-') if (pItem) finalNoKartu = pItem.no_kartu;
-          if (!finalMerk || finalMerk === '-' || finalMerk.toLowerCase() === 'n/a') finalMerk = (pItem && pItem.merk) ? pItem.merk : '-';
-          const finalTahun = safeString(it.tahun) || safeString(it.tgl_pengadaan) || (pItem ? safeString(pItem.tgl_pengadaan) : '-');
-          
-          let itemLoc = it.ruangan && it.ruangan !== '-' ? it.ruangan : (it.pemegang && it.pemegang !== '-' ? it.pemegang : defaultLocation);
-          let namaSkpd = safeString(it.skpd || ''); 
-          if (!namaSkpd || namaSkpd === '-') {
-              const holder = (data||[]).find(p => safeString(p.nama).toLowerCase() === safeString(itemLoc).toLowerCase());
-              if (holder && holder.skpd && holder.skpd !== '-') namaSkpd = holder.skpd; 
-              else if (holder && holder.bidang && holder.bidang !== '-') namaSkpd = holder.bidang; 
-              else namaSkpd = '-';
-          }
-          const namaDinas = "DINAS PERKEBUNAN PROV. JATIM";
-          let labelContent = templates.label ? templates.label
-              .replace(/\{\{NAMA_BARANG\}\}/g, safeString(it.nama) || 'N/A')
-              .replace(/\{\{MERK\}\}/g, finalMerk)
-              .replace(/\{\{NO_KARTU\}\}/g, finalNoKartu || '-')
-              .replace(/\{\{TAHUN\}\}/g, finalTahun)
-              .replace(/\{\{SISTEM_ID\}\}/g, finalNoKartu ? finalNoKartu.replace(/[^a-zA-Z0-9.-]/g, '_') : 'Generated')
-              .replace(/\{\{LOKASI\}\}/g, safeString(itemLoc) || '-')
-              .replace(/\{\{NAMA_DINAS\}\}/g, namaDinas)
-              .replace(/\{\{NAMA_SKPD\}\}/g, namaSkpd)
-              : `
-              <table style="width: 320px; border-collapse: collapse; border: 2px solid #047857; font-family: 'Arial', sans-serif; margin-bottom: 10px;">
-                  <tr><td style="background-color: #047857; color: white; text-align: center; font-weight: bold; font-size: 14px; padding: 6px;">${namaDinas}</td></tr>
-                  <tr><td style="background-color: #047857; color: white; text-align: center; font-size: 10px; padding-bottom: 6px; border-bottom: 1px solid #047857;">${namaSkpd}</td></tr>
-                  <tr><td style="padding: 10px;"><table style="width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.5;">
-                      <tr><td style="width: 80px; font-weight: bold;">No. Kartu</td><td style="width: 10px;">:</td><td style="font-weight: bold;">${finalNoKartu || '-'}</td></tr>
-                      <tr><td style="font-weight: bold;">Nama Barang</td><td>:</td><td style="font-weight: bold;">${safeString(it.nama) || 'N/A'}</td></tr>
-                      <tr><td style="font-weight: bold; color: #555;">Merk / Tipe</td><td>:</td><td style="color: #555;">${finalMerk}</td></tr>
-                      <tr><td style="font-weight: bold;">Tahun</td><td>:</td><td>${finalTahun}</td></tr>
-                      <tr><td style="font-weight: bold; padding-top: 5px;">Lokasi/User</td><td style="padding-top: 5px;">:</td><td style="padding-top: 5px;">${safeString(itemLoc) || '-'}</td></tr>
-                  </table></td></tr>
-              </table>`;
-          if (index % 2 === 0) rowsHtml += '<tr>';
-          rowsHtml += `<td style="padding: 15px; vertical-align: top;">${labelContent}</td>`;
-          if (index % 2 === 1 || index === items.length - 1) rowsHtml += '</tr>';
-      });
-      const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'></head><body><table style="width: 100%; border-collapse: collapse;">${rowsHtml}</table></body></html>`;
-      const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
-      if (window.saveAs) window.saveAs(blob, `Label_Massal_${safeString(defaultLocation).replace(/[^a-zA-Z0-9.-]/g, '_')}.doc`); 
-      else { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Label_Massal_${safeString(defaultLocation).replace(/[^a-zA-Z0-9.-]/g, '_')}.doc`; a.click(); }
-  };
+
+
+  const generateBASTKendaraan = async (item, sender, receiver) => {
+    console.log("===== ITEM KENDARAAN =====");
+    console.log(item);
+
+    try {
+
+        if (!templates.bast_kendaraan?.url) {
+
+            customAlert(
+                "Template belum ada",
+                "Silakan upload template BAST Kendaraan."
+            );
+
+            return;
+        }
+
+        const sekarang = new Date();
+
+        const hari = sekarang.toLocaleDateString(
+            "id-ID",
+            {
+                weekday: "long"
+            }
+        );
+
+        const bulan = sekarang.toLocaleDateString(
+            "id-ID",
+            {
+                month: "long"
+            }
+        );
+
+        const kendaraan = buildBastKendaraanData(
+            [item],
+            safeString
+        );
+
+        const dataTemplate = {
+
+            nama_pihak_pertama: safeString(sender.nama),
+            nip_pihak_pertama: safeString(sender.nip),
+            jabatan_pihak_pertama: safeString(sender.jabatan),
+
+            nama_pihak_kedua: safeString(receiver.nama),
+            nip_pihak_kedua: safeString(receiver.nip),
+            jabatan_pihak_kedua: safeString(receiver.jabatan),
+
+            hari,
+            tanggal_terbilang: terbilang(sekarang.getDate()),
+            bulan,
+            tahun_terbilang: terbilang(sekarang.getFullYear()),
+
+            kendaraan
+
+        };
+
+        await exportDocx(
+            templates.bast_kendaraan.url,
+            dataTemplate,
+            `BAST Kendaraan - ${safeString(item.no_polisi)}.docx`
+        );
+
+    } catch (err) {
+
+        console.error(err);
+
+        customAlert(
+            "Export gagal",
+            err.message
+        );
+
+    }
+
+};
+
+const generateSPPKD = async (
+    kendaraan,
+    pengemudi,
+    pengurus,
+    tujuan
+) => {
+    try {
+        if (!templates.sppkd?.url) {
+            customAlert(
+                "Template belum ada",
+                "Silakan upload template SPPKD."
+            );
+            return;
+        }
+
+        const sekarang = new Date();
+
+        const dataTemplate = {
+            // Kendaraan
+            jenis_kendaraan: safeString(kendaraan.nama),
+            no_polisi: safeString(
+                kendaraan.no_polisi ||
+                kendaraan.no_kartu ||
+                "-"
+            ),
+
+            // Pengemudi
+            nama_pengemudi: safeString(pengemudi),
+
+            // Pengurus barang
+            nama_pengurus: safeString(pengurus?.nama),
+            nip_pengurus: safeString(pengurus?.nip),
+
+            // Perjalanan
+            tujuan: safeString(tujuan),
+
+            // Tanggal pembuatan
+            tanggal: sekarang.getDate().toString(),
+            bulan: sekarang.toLocaleDateString("id-ID", {
+                month: "long"
+            }),
+            tahun: sekarang.getFullYear().toString()
+        };
+
+        console.log("DATA SPPKD:", dataTemplate);
+
+        await exportDocx(
+            templates.sppkd.url,
+            dataTemplate,
+            `SPPKD - ${safeString(kendaraan.no_kartu)}.docx`
+        );
+
+    } catch (err) {
+        console.error("ERROR SPPKD:", err);
+        customAlert("Export SPPKD gagal", err.message);
+    }
+};
+
+  const handleExportBulkLabel = async (
+    items,
+    defaultLocation = "Kumpulan Aset"
+) => {
+
+    if (!templates.label?.url) {
+
+        customAlert(
+            "Template belum ada",
+            "Silakan upload template label."
+        );
+
+        return;
+
+    }
+
+    await exportLabelExcel(
+
+        templates.label.url,
+
+        items,
+
+        defaultLocation,
+
+        priceData,
+
+        data,
+
+        safeString
+
+    );
+
+};
   const monitoringDataFiltered = useMemo(() => {
     const today = new Date(); today.setHours(0,0,0,0);
     const assetMap = {}; 
@@ -477,7 +640,7 @@ const App = () => {
         err => console.error("Error fetching tanah:", err)
     );
     const unsubTemplates = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'templates_doc', activeUnitView), 
-        s => { if(s.exists()) setTemplates(s.data()); else setTemplates({ sppbi: '', kir: '', label: '' }); },
+        s => { if(s.exists()) setTemplates(s.data()); else setTemplates({ sppbi: '',  bast_barang: '', kir: '', label: '' }); },
         err => console.error("Error fetching templates:", err)
     );
     const unsubRkbmdArsip = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'rkbmd_arsip'), 
@@ -570,16 +733,135 @@ const App = () => {
              }, { merge: true }); 
              count++; if (count % 400 === 0) { await batch.commit(); batch = writeBatch(db); setStatus(prev => ({...prev, progress: Math.round((i/jsonData.length)*100)})); }
           }
-        } else if (status.uploadType === 'pajak') {
-          for (let i = 0; i < jsonData.length; i++) {
-             const row = jsonData[i]; if (!row) continue;
-             const jenisKendaraan = safeString(row[1]).trim(); const noPolisi = safeString(row[3]).trim();
-             if (!noPolisi || noPolisi.toLowerCase() === 'nomor polisi' || noPolisi.includes('NOMOR POLISI')) continue;
-             if (!jenisKendaraan || jenisKendaraan.toLowerCase().includes('roda')) continue;
-             let tglPajakRaw = row[6]; let tglPajakIso = null;
-             if (tglPajakRaw) { const parsedDate = parseDateRobust(tglPajakRaw); if (parsedDate) tglPajakIso = parsedDate.toISOString(); }
-             const safeId = noPolisi.replace(/[^a-zA-Z0-9.-]/g, '_'); batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'prices', safeId), { ...injectUnit, nama: jenisKendaraan.toUpperCase(), no_kartu: noPolisi, lokasi: safeString(row[5]).trim() || 'N/A', tgl_pajak: tglPajakIso || safeString(tglPajakRaw), updatedAt: serverTimestamp() }, { merge: true }); count++; if (count % 400 === 0) { await batch.commit(); batch = writeBatch(db); setStatus(prev => ({...prev, progress: Math.round((i/jsonData.length)*100)})); }
-          }
+       } else if (status.uploadType === 'pajak') {
+
+    for (let i = 0; i < jsonData.length; i++) {
+
+        const row = jsonData[i];
+        if (!row) continue;
+
+        const jenisKendaraan = safeString(row[1]).trim();
+        const noPolisi = safeString(row[3]).trim();
+
+        if (
+            !noPolisi ||
+            noPolisi.toLowerCase() === 'nomor polisi' ||
+            noPolisi.toUpperCase().includes('NOMOR POLISI')
+        ) continue;
+
+        if (
+            !jenisKendaraan ||
+            jenisKendaraan.toLowerCase().includes('roda')
+        ) continue;
+
+
+        // ==========================
+        // NO RANGKA & NO MESIN
+        // ==========================
+
+        const rangkaMesinRaw = safeString(row[4]).trim();
+
+        let noRangka = "";
+        let noMesin = "";
+
+        if (rangkaMesinRaw) {
+
+            // Excel biasanya menyimpan:
+            // NO RANGKA
+            // NO MESIN
+            // dalam satu cell dengan baris baru
+
+            const parts = rangkaMesinRaw
+                .split(/\r?\n/)
+                .map(x => x.trim())
+                .filter(Boolean);
+
+            noRangka = parts[0] || "";
+            noMesin = parts[1] || "";
+        }
+
+
+        // ==========================
+        // TANGGAL PAJAK
+        // ==========================
+
+        let tglPajakRaw = row[6];
+        let tglPajakIso = null;
+
+        if (tglPajakRaw) {
+            const parsedDate = parseDateRobust(tglPajakRaw);
+
+            if (parsedDate) {
+                tglPajakIso = parsedDate.toISOString();
+            }
+        }
+
+
+        // ==========================
+        // SIMPAN KE FIRESTORE
+        // ==========================
+
+        const safeId = noPolisi.replace(
+            /[^a-zA-Z0-9.-]/g,
+            '_'
+        );
+
+        const payload = {
+            ...injectUnit,
+
+            nama: jenisKendaraan.toUpperCase(),
+
+            no_kartu: noPolisi,
+
+            lokasi: safeString(row[5]).trim() || 'N/A',
+
+            no_rangka: noRangka,
+            no_mesin: noMesin,
+
+            tgl_pajak:
+                tglPajakIso ||
+                safeString(tglPajakRaw),
+
+            updatedAt: serverTimestamp()
+        };
+
+
+        console.log("UPLOAD KENDARAAN:", payload);
+
+
+        batch.set(
+            doc(
+                db,
+                'artifacts',
+                appId,
+                'public',
+                'data',
+                'prices',
+                safeId
+            ),
+            payload,
+            { merge: true }
+        );
+
+
+        count++;
+
+        if (count % 400 === 0) {
+
+            await batch.commit();
+
+            batch = writeBatch(db);
+
+            setStatus(prev => ({
+                ...prev,
+                progress: Math.round(
+                    (i / jsonData.length) * 100
+                )
+            }));
+        }
+    }
+
+} else if (status.uploadType === 'tanah') {
         } else if (status.uploadType === 'tanah') {
             let headers = [], startRow = 0;
             for(let r = 0; r < Math.min(5, jsonData.length); r++) { const rowStr = (jsonData[r]||[]).map(c=>safeString(c).toLowerCase()).join(' '); if(rowStr.includes('kib') || rowStr.includes('kode') || rowStr.includes('luas') || rowStr.includes('alamat')) { headers = (jsonData[r]||[]).map(c=>safeString(c).toLowerCase()); startRow = r + 1; break; } }
@@ -829,7 +1111,7 @@ const App = () => {
         const safeId = safeTransferItem.no_kartu ? safeString(safeTransferItem.no_kartu).replace(/[^a-zA-Z0-9.-]/g, '_') : null;
         if(safeId && !safeTransferItem.isLocalOnly) b.set(doc(db, 'artifacts', appId, 'public', 'data', 'prices', safeId), { lokasi: target.nama, updatedAt: serverTimestamp() }, { merge: true });
         
-        await b.commit(); setModals({...modals, transfer: false}); generateBAST(safeTransferItem, selectedUser, target);
+        await b.commit(); setModals({...modals, transfer: false}); await generateBAST(safeTransferItem, selectedUser, target);
      } catch(e){ customAlert("Gagal", "Error mutasi."); } setStatus({ ...status, loading: false });
   };
   const processTransferUnit = async (targetUnit, targetBidang) => {
@@ -1029,14 +1311,32 @@ const App = () => {
      });
   };
   const processPajakOwner = async (targetIdParam) => {
-      const { item } = editPajakModal; if (!item || !user) return; setStatus({ ...status, loading: true });
+      const { item } = editPajakModal;console.log("processPajakOwner dijalankan"); if (!item || !user) return; setStatus({ ...status, loading: true });
       try {
           const safeId = item.no_kartu ? safeString(item.no_kartu).trim().replace(/[^a-zA-Z0-9.-]/g, '_') : safeString(item.nama).toUpperCase().replace(/[^a-zA-Z0-9]/g, '_').substring(0, 100);
           let locName = targetIdParam; const isPegawai = (data || []).find(p => p.nip === targetIdParam); if (isPegawai) locName = isPegawai.nama;
-          await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'prices', safeId), { lokasi: locName, updatedAt: serverTimestamp() }, { merge: true }); 
+          // Pemegang baru
+            const receiver = isPegawai;
+
+            // Pemegang lama
+            const sender = (data || []).find(
+                p => p.nama === item.lokasi || p.nama === item.pemegang
+            );
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'prices', safeId), { lokasi: locName, updatedAt: serverTimestamp() }, { merge: true });
+                if (sender && receiver) {
+            console.log("Mau generate BAST");
+            console.log(sender);
+            console.log(receiver);
+            await generateBASTKendaraan(item,sender,receiver);
+} 
           customAlert("Berhasil", "Pemegang kendaraan telah diperbarui."); setEditPajakModal({ show: false, item: null });
-      } catch (e) {} setStatus({ ...status, loading: false });
+      } catch (e) {
+            console.error("processPajakOwner ERROR:", e);
+            customAlert("Error", e.message);
+        }
+      setStatus({ ...status, loading: false });
   };
+
   const processLinkAset = async (linkType, targetValue, updateMaster) => {
       const { item } = linkAsetModal; if (!item || !user) return; setStatus({ ...status, loading: true });
       try {
@@ -1055,7 +1355,9 @@ const App = () => {
               customAlert("Berhasil", "Data dihubungkan & disimpan ke Master Data.");
           } else { customAlert("Berhasil", "Lokasi diupdate."); }
           setLinkAsetModal({ show: false, item: null });
-      } catch (e) {} setStatus({ ...status, loading: false });
+         } catch (e) {
+        } 
+      setStatus({ ...status, loading: false });
   };
   const processEditNilai = async (nilaiPerolehanBaru, tglPengadaanBaru, tglHabisBaru, nilaiBukuBaru, pass) => {
       if (pass !== 'SugengR' && pass !== 'AchmarA') return customAlert("Gagal", "Password salah!");

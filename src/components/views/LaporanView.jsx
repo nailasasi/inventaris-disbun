@@ -3,7 +3,7 @@ import React from 'react';
 import { doc, setDoc } from 'firebase/firestore';
 import { UNIT_LABELS, appId, db } from '../../config/firebase';
 
-const LaporanView = ({ activeUnitView, customConfirm, handleExportExcel, handleExportWordSPPBI, handleExportBastBarang, handleExportBastKendaraan, handleExportSPPKD, handleTemplateUpload, isDarkMode, isReadOnly, modals, selectedYear, setModals, setSelectedYear, setStatus, status, templates }) => {
+const LaporanView = ({ activeUnitView, customConfirm, handleExportExcel, handleExportWordSPPBI, handleTemplateUpload, isDarkMode, isReadOnly, modals, selectedYear, setModals, setSelectedYear, setStatus, status, templates }) => {
   const templateList = [
     {
         key: "sppbi",
@@ -65,65 +65,11 @@ const LaporanView = ({ activeUnitView, customConfirm, handleExportExcel, handleE
                    </select>
                 </div>
                 
-                {/* STEP 5: Grid diperbarui menjadi lg:grid-cols-4 untuk layout 2 baris x 4 kolom */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-                   <button onClick={()=>handleExportExcel('all')} className={`p-6 border rounded-[2rem] hover:shadow-xl transition-all text-left group ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}><div className="w-10 h-10 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><Database/></div><h4 className="font-black text-base md:text-lg">Semua Data</h4><p className="text-[10px] md:text-xs text-slate-400 mt-2">Export Excel Lengkap</p></button>
-                   <button onClick={()=>handleExportExcel('disposal')} className={`p-6 border rounded-[2rem] hover:shadow-xl transition-all text-left group ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}><div className="w-10 h-10 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><AlertTriangle/></div><h4 className="font-black text-base md:text-lg">Usulan Hapus</h4><p className="text-[10px] md:text-xs text-slate-400 mt-2">Aset Expired / Rp 0</p></button>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6">
+                   <button onClick={()=>handleExportExcel('all')} className={`p-6 border rounded-[2rem] hover:shadow-xl transition-all text-left group ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}><div className="w-10 h-10 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><Database/></div><h4 className="font-black text-base md:text-lg whitespace-nowrap">Semua Data</h4><p className="text-[10px] md:text-xs text-slate-400 mt-2">Export Excel Lengkap</p></button>
+                   <button onClick={()=>handleExportExcel('disposal')} className={`p-6 border rounded-[2rem] hover:shadow-xl transition-all text-left group ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}><div className="w-10 h-10 bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><AlertTriangle/></div><h4 className="font-black text-base md:text-lg whitespace-nowrap">Usulan Hapus</h4><p className="text-[10px] md:text-xs text-slate-400 mt-2">Aset Expired / Rp 0</p></button>
                    <button onClick={()=>handleExportExcel('active')} className={`p-6 border rounded-[2rem] hover:shadow-xl transition-all text-left group ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}><div className="w-10 h-10 bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><CheckCircle2/></div><h4 className="font-black text-base md:text-lg">Aset Aktif</h4><p className="text-[10px] md:text-xs text-slate-400 mt-2">Aset Produktif</p></button>
                    <button onClick={()=>handleExportWordSPPBI(null)} className={`p-6 border rounded-[2rem] hover:shadow-xl transition-all text-left group ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}><div className="w-10 h-10 bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><FileSignature/></div><h4 className="font-black text-base md:text-lg">Cetak SPPBI</h4><p className="text-[10px] md:text-xs text-slate-400 mt-2">Dokumen Word (BAST)</p></button>
-                   
-                   {/* STEP 4: 3 Card Baru Ditambahkan */}
-                   {/* Card BAST Barang */}
-                   <button
-                       onClick={handleExportBastBarang}
-                       className={`p-6 border rounded-[2rem] hover:shadow-xl transition-all text-left group ${
-                           isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white"
-                       }`}>
-                       <div className="w-10 h-10 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                           📄
-                       </div>
-                       <h4 className="font-black text-base md:text-lg">
-                           Cetak BAST Barang
-                       </h4>
-                       <p className="text-[10px] md:text-xs text-slate-400 mt-2">
-                           Dokumen Word
-                       </p>
-                   </button>
-
-                   {/* Card BAST Kendaraan */}
-                   <button
-                       onClick={handleExportBastKendaraan}
-                       className={`p-6 border rounded-[2rem] hover:shadow-xl transition-all text-left group ${
-                           isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white"
-                       }`}>
-                       <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                           🚗
-                       </div>
-                       <h4 className="font-black text-base md:text-lg">
-                           Cetak BAST Kendaraan
-                       </h4>
-                       <p className="text-[10px] md:text-xs text-slate-400 mt-2">
-                           Dokumen Word
-                       </p>
-                   </button>
-
-                   {/* Card SPPKD */}
-                   <button
-                       onClick={handleExportSPPKD}
-                       className={`p-6 border rounded-[2rem] hover:shadow-xl transition-all text-left group ${
-                           isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white"
-                       }`}>
-                       <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                           📑
-                       </div>
-                       <h4 className="font-black text-base md:text-lg">
-                           Cetak SPPKD
-                       </h4>
-                       <p className="text-[10px] md:text-xs text-slate-400 mt-2">
-                           Dokumen Word
-                       </p>
-                   </button>
-
                    <button onClick={()=>setModals({...modals, bulkLabel: true})} className={`p-6 border rounded-[2rem] hover:shadow-xl transition-all text-left group ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}><div className="w-10 h-10 bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><QrCode/></div><h4 className="font-black text-base md:text-lg">Cetak Label</h4><p className="text-[10px] md:text-xs text-slate-400 mt-2">Pilih Banyak Aset (Word)</p></button>
                 </div>
                 

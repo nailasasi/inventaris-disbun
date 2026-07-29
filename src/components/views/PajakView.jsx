@@ -47,6 +47,7 @@ const PajakView = ({ handleExportPajak, handleExportWordSPPBIVehicle, handlePerp
               <th className="pb-4">Kendaraan</th>
               <th className="pb-4">Pemegang</th>
               <th className="pb-4">Tgl Pajak (Masa Berlaku)</th>
+              <th className="pb-4 text-center">Pajak 5 Tahunan</th>
               <th className="pb-4 text-center">Status</th>
               <th className="pb-4 text-center">Foto Kendaraan</th>
               <th className="pb-4 text-center">Bukti Bayar {pajakSelectedYear}</th>
@@ -55,16 +56,21 @@ const PajakView = ({ handleExportPajak, handleExportWordSPPBIVehicle, handlePerp
           </thead>
           <tbody className={`divide-y ${isDarkMode ? 'divide-slate-700' : ''}`}>
             {vehicleItems.length === 0 ? (
-              <tr><td colSpan="7" className="text-center py-10 text-slate-400 font-bold">Tidak ada data kendaraan terdeteksi.</td></tr>
+              <tr><td colSpan="8" className="text-center py-10 text-slate-400 font-bold">Tidak ada data kendaraan terdeteksi.</td></tr>
             ) : (
               vehicleItems.map((it, i) => {
                 const tglMasa = parseDateRobust(getSafeDateString(it.tgl_pajak) || getSafeDateString(it.tgl_pengadaan));
-                let diffDays = 0, warning = false; 
-                if (tglMasa) { 
-                  diffDays = Math.ceil((tglMasa - new Date()) / 86400000); 
-                  warning = diffDays <= 30; 
+
+                let diffDays = 0;
+                let warning = false;
+                let pajak5Tahunan = false;
+
+                if (tglMasa) {
+                  diffDays = Math.ceil((tglMasa - new Date()) / 86400000);
+                  warning = diffDays <= 30;
+                  pajak5Tahunan = diffDays >= 0 && diffDays <= 30;
                 }
-                
+
                 const currentBukti = it[`pajak_history.${pajakSelectedYear}`] || null;
                 console.log("CURRENT BUKTI =", currentBukti);
                 
@@ -74,29 +80,115 @@ const PajakView = ({ handleExportPajak, handleExportWordSPPBIVehicle, handlePerp
                       <p className="font-bold text-sm">{safeString(it.nama)}</p>
                       <p className="text-xs text-slate-400 font-mono">{safeString(it.no_kartu)}</p>
                     </td>
-                    <td className="py-4 text-sm font-bold text-slate-500 flex items-center gap-2">
-                      {it.pemegang !== '-' ? safeString(it.pemegang) : (it.ruangan !== '-' ? safeString(it.ruangan) : safeString(it.lokasi || 'N/A'))}
-                      {!isReadOnly && (
-                        <button onClick={() => setEditPajakModal({ show: true, item: it })} className="text-emerald-500 p-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 rounded" title="Edit Pemegang">
-                          <Edit3 size={14} />
-                        </button>
-                      )}
+                    <td className="py-4 text-sm font-bold text-slate-500">
+                      <div className="flex items-start gap-2">
+                        <span className="leading-snug break-words max-w-[160px] md:max-w-[200px]">
+                          {it.pemegang !== '-' ? safeString(it.pemegang) : (it.ruangan !== '-' ? safeString(it.ruangan) : safeString(it.lokasi || 'N/A'))}
+                        </span>
+                        {!isReadOnly && (
+                          <button onClick={() => setEditPajakModal({ show: true, item: it })} className="text-emerald-500 p-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 rounded shrink-0 mt-0.5" title="Edit Pemegang">
+                            <Edit3 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </td>
-                    <td className="py-4 text-sm font-bold">{tglMasa ? tglMasa.toLocaleDateString('id-ID') : '-'}</td>
+                    <td className="py-4 text-sm font-bold">
+                        {tglMasa ? tglMasa.toLocaleDateString("id-ID") : "-"}
+                    </td>
+
+                    {/* PAJAK 5 TAHUNAN */}
                     <td className="py-4 text-center">
-                      {tglMasa && <span className={`px-3 py-1 rounded-full text-[10px] font-black ${warning ? (diffDays < 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700') : 'bg-emerald-100 text-emerald-700'}`}>{diffDays < 0 ? 'LEWAT WAKTU' : (warning ? `H-${diffDays}` : 'AMAN')}</span>}
+                        <span
+                            className={`px-3 py-1 rounded-full text-[10px] font-black ${
+                                pajak5Tahunan
+                                    ? "bg-orange-100 text-orange-700"
+                                    : "bg-emerald-100 text-emerald-700"
+                            }`}
+                        >
+                            {pajak5Tahunan ? "IYA" : "TIDAK"}
+                        </span>
                     </td>
+
+                    {/* STATUS */}
+                    <td className="py-4 text-center">
+                        {tglMasa && (
+                            <span
+                                className={`px-3 py-1 rounded-full text-[10px] font-black ${
+                                    warning
+                                        ? (diffDays < 0
+                                            ? "bg-red-100 text-red-700"
+                                            : "bg-orange-100 text-orange-700")
+                                        : "bg-emerald-100 text-emerald-700"
+                                }`}
+                            >
+                                {diffDays < 0
+                                    ? "LEWAT WAKTU"
+                                    : (warning ? `H-${diffDays}` : "AMAN")}
+                            </span>
+                        )}
+                    </td>
+
+                    {/* FOTO KENDARAAN */}
                     <td className="py-4 text-center">
                       {it.photoBase64 ? (
-                        <button onClick={() => setPhotoModal({ show: true, item: it, preview: safeString(it.photoBase64), file: null, isSPPBI: false, isPajak: false, isPBB: false, isRkbmdArchive: false, rkbmdMeta: null, pajakYear: '', pbbYear: '', isPdf: false, isExcel: false, fileName: '' })} className="text-[10px] md:text-xs text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-2 rounded py-1">Lihat Foto</button>
+                        <button
+                          onClick={() =>
+                            setPhotoModal({
+                              show: true,
+                              item: it,
+                              preview: safeString(it.photoBase64),
+                              file: null,
+                              isSPPBI: false,
+                              isPajak: false,
+                              isPBB: false,
+                              isRkbmdArchive: false,
+                              rkbmdMeta: null,
+                              pajakYear: "",
+                              pbbYear: "",
+                              isPdf: false,
+                              isExcel: false,
+                              fileName: "",
+                            })
+                          }
+                          className="text-[10px] md:text-xs text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-2 rounded py-1"
+                        >
+                          Lihat Foto
+                        </button>
                       ) : (
                         !isReadOnly ? (
-                          <button onClick={() => setPhotoModal({ show: true, item: it, preview: null, file: null, isSPPBI: false, isPajak: false, isPBB: false, isRkbmdArchive: false, rkbmdMeta: null, pajakYear: '', pbbYear: '', isPdf: false, isExcel: false, fileName: '' })} className="text-slate-400 p-2 border border-transparent hover:border-emerald-200 rounded" title="Upload Foto Kendaraan"><Camera size={16} /></button>
+                          <button
+                            onClick={() =>
+                              setPhotoModal({
+                                show: true,
+                                item: it,
+                                preview: null,
+                                file: null,
+                                isSPPBI: false,
+                                isPajak: false,
+                                isPBB: false,
+                                isRkbmdArchive: false,
+                                rkbmdMeta: null,
+                                pajakYear: "",
+                                pbbYear: "",
+                                isPdf: false,
+                                isExcel: false,
+                                fileName: "",
+                              })
+                            }
+                            className="text-slate-400 p-2 border border-transparent hover:border-emerald-200 rounded"
+                            title="Upload Foto Kendaraan"
+                          >
+                            <Camera size={16} />
+                          </button>
                         ) : (
-                          <span className="text-xs text-slate-400 italic">Kosong</span>
+                          <span className="text-xs text-slate-400 italic">
+                            Kosong
+                          </span>
                         )
                       )}
                     </td>
+
+                    {/* BUKTI BAYAR */}
                     <td className="py-4 text-center">
                       {currentBukti ? (
                         <div className="flex flex-col gap-2 items-center">
