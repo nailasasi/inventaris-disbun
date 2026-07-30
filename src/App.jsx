@@ -422,10 +422,23 @@ const generateSPPKD = async (
 
 };
   const monitoringDataFiltered = useMemo(() => {
-    const today = new Date(); today.setHours(0,0,0,0);
-    const assetMap = {}; 
+
+    console.log("MASUK monitoringDataFiltered");
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    const assetMap = {};
     Object.values(filteredPriceData || {}).forEach(item => {
-       const cleanNo = safeString(item.no_kartu).trim().toLowerCase();
+
+    if (
+        item.nama?.includes("TOYOTA") ||
+        item.nama?.includes("HONDA")
+    ) {
+        console.log("KENDARAAN", item);
+    }
+
+    const cleanNo = safeString(item.no_kartu).trim().toLowerCase();
        const key = cleanNo || `price_${Math.random()}`;
        
        const { masa_manfaat } = parseKodeBarangData(item.no_kartu, kodeBarangData);
@@ -445,10 +458,39 @@ const generateSPPKD = async (
        const loc = safeString(item.lokasi).trim();
        if (loc && loc !== '-' && loc !== 'N/A' && loc !== 'Manual') { if (dynamicRooms.includes(loc)) ruangan = loc; else pemegang = loc; }
        
+       if (
+            item.nama?.includes("TOYOTA") ||
+            item.nama?.includes("HONDA")
+        ) {
+            console.log({
+                nama: item.nama,
+                lokasi: item.lokasi,
+                dynamicRooms,
+                isRoom: dynamicRooms.includes(loc),
+                pemegang,
+                ruangan
+            });
+        }
+
        const liveNilaiBuku = item.manual_active ? item.nilai_buku : calculateNilaiBuku(item.nilai_perolehan, item.tgl_pengadaan, masa_manfaat);
        
        assetMap[key] = { ...item, nilai_buku: liveNilaiBuku, tgl_habis: dynTglHabis, diffDays: diff, isExpired: expired, pemegang, ruangan, skpd: '-' };
     });
+    console.log("PEGAWAI DATA", filteredPegawaiData);
+
+        console.log(
+        "ITEM PEGAWAI PERTAMA",
+        filteredPegawaiData[0]?.items
+    );
+
+    const pegawaiMobil = (filteredPegawaiData || []).filter(p =>
+    (p.items || []).some(it =>
+        safeString(it.nama).toUpperCase().includes("TOYOTA") ||
+        safeString(it.nama).toUpperCase().includes("HONDA")
+    )
+    );
+
+    console.log("PEGAWAI MOBIL", pegawaiMobil);
     (filteredPegawaiData || []).forEach(p => {
        (p.items || []).forEach((it, idx) => {
            let cleanNo = safeString(it.no_kartu).trim().toLowerCase();
@@ -461,8 +503,20 @@ const generateSPPKD = async (
                if (matchedKey) cleanNo = matchedKey;
            }
            if (cleanNo && assetMap[cleanNo]) {
-               assetMap[cleanNo].pemegang = p.nama;
-               assetMap[cleanNo].skpd = p.skpd || p.bidang || '-';
+
+            if (
+                assetMap[cleanNo].nama === "TOYOTA KIJANG INNOVA GXW42"
+            ) {
+                console.log("MATCH KENDARAAN", {
+                    nama: assetMap[cleanNo].nama,
+                    no_kartu: cleanNo,
+                    sebelum: assetMap[cleanNo].pemegang,
+                    pegawai: p.nama
+                });
+            }
+
+            assetMap[cleanNo].pemegang = p.nama;
+            assetMap[cleanNo].skpd = p.skpd || p.bidang || '-';
            } else {
                const { masa_manfaat } = parseKodeBarangData(it.no_kartu, kodeBarangData);
                let dynTglHabis = null;
@@ -477,6 +531,14 @@ const generateSPPKD = async (
            }
        });
     });
+        const ruanganMobil = (filteredRuanganData || []).filter(r =>
+    (r.items || []).some(it =>
+        safeString(it.nama).toUpperCase().includes("TOYOTA") ||
+        safeString(it.nama).toUpperCase().includes("HONDA")
+    )
+    );
+
+    console.log("RUANGAN MOBIL", ruanganMobil);
     (filteredRuanganData || []).forEach(r => {
        (r.items || []).forEach((it, idx) => {
            let cleanNo = safeString(it.no_kartu).trim().toLowerCase();
@@ -519,12 +581,21 @@ const generateSPPKD = async (
   const disposalData = monitoringDataFiltered.filter(x => x._disposal && !x.manual_active);
   const currentRoomData = filteredRuanganData.find(doc => doc.nama_ruangan === selectedRoomName) || { items: [] };
   const totalInventaris = (filteredPegawaiData || []).reduce((acc, p) => acc + (p.items?.length || 0), 0) + (filteredRuanganData || []).reduce((acc, r) => acc + (r.items?.length || 0), 0);
-  
   const vehicleItems = monitoringDataFiltered.filter(i => {
-      const n = safeString(i.nama).toLowerCase();
-      const isVehicle = (n.includes('motor') || n.includes('mobil') || n.includes('kendaraan') || n.includes('truk') || n.includes('jeep') || n.includes('pick up')) && !n.includes('kursi roda') && !n.includes('roda dorong');
-      return isVehicle || i.tgl_pajak;
-  });
+        const n = safeString(i.nama).toLowerCase();
+        const isVehicle = (n.includes('motor') || n.includes('mobil') || n.includes('kendaraan') || n.includes('truk') || n.includes('jeep') || n.includes('pick up')) && !n.includes('kursi roda') && !n.includes('roda dorong');
+        (n.includes("motor") ||
+         n.includes("mobil") ||
+         n.includes("kendaraan") ||
+         n.includes("truk") ||
+         n.includes("jeep") ||
+         n.includes("pick up")) &&
+        !n.includes("kursi roda") &&
+        !n.includes("roda dorong");
+
+        return isVehicle || i.tgl_pajak;
+    });
+    console.log("VEHICLE ITEMS", vehicleItems);
   const filteredTanahDataFinal = filteredTanahDataForView.filter(t => safeString(t.kib).toLowerCase().includes(tanahSearch.toLowerCase()) || safeString(t.deskripsi).toLowerCase().includes(tanahSearch.toLowerCase()) || safeString(t.alamat).toLowerCase().includes(tanahSearch.toLowerCase()));
   const statsAsetAktif = activeMonitoringData.filter(x => !x.manual_active).length;
   const statsReAktif = activeMonitoringData.filter(x => x.manual_active).length;
@@ -600,8 +671,8 @@ const generateSPPKD = async (
 
             s.forEach(d => {
 
-                if (d.data().nama === "TOYOTA KIJANG KAPSUL") {
-                    console.log("TOYOTA FIRESTORE", d.data());
+                if (d.data().nama?.toUpperCase().includes("TOYOTA")) {
+                    console.log("DATA TOYOTA", d.data());
                 }
 
                 t[d.id] = {
@@ -693,230 +764,331 @@ const generateSPPKD = async (
     else if (val.length === 0) setSelectedUser(null);
   };
   const handleBulkUpload = async (e) => {
-    const file = e.target.files[0]; if (!file || !window.XLSX || !user) return; setStatus({ ...status, loading: true, progress: 0 });
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const arrayData = new Uint8Array(ev.target.result); const wb = window.XLSX.read(arrayData, { type: 'array' }); const ws = wb.Sheets[wb.SheetNames[0]]; const jsonData = window.XLSX.utils.sheet_to_json(ws, { header: 1 });
-        let count = 0; let batch = writeBatch(db);
-        const injectUnit = { unitId: activeUnitView };
-        const isAppend = status.uploadAppend;
-        if (status.uploadType === 'prices') {
-          for (let i = 1; i < jsonData.length; i++) {
-             const row = jsonData[i]; if (!row || row.length < 9) continue;
-             const noKartu = safeString(row[0]).trim(); if (!noKartu) continue;
-             
-             const tglPengadaanVal = row[1] instanceof Date ? row[1].toISOString() : safeString(row[1]);
-             const perolehanVal = typeof row[3] === 'number' ? row[3] : parseFloat(safeString(row[3]).replace(/,/g, '')) || 0;
-             
-             const { masa_manfaat } = parseKodeBarangData(noKartu, kodeBarangData);
-             const calculatedNilaiBuku = calculateNilaiBuku(perolehanVal, tglPengadaanVal, masa_manfaat);
-             let calculatedTglHabis = row[2] instanceof Date ? row[2].toISOString() : safeString(row[2]);
-             const dPengadaan = parseDateRobust(tglPengadaanVal);
-             if (dPengadaan && (!calculatedTglHabis || calculatedTglHabis.trim() === '' || calculatedTglHabis === 'undefined')) {
-                 const dHabis = new Date(dPengadaan);
-                 dHabis.setFullYear(dHabis.getFullYear() + masa_manfaat);
-                 calculatedTglHabis = dHabis.toISOString();
-             }
-             const payload = { ...injectUnit, nama: safeString(row[8]).trim().toUpperCase(), no_kartu: noKartu, tgl_pengadaan: tglPengadaanVal, tgl_habis: calculatedTglHabis, nilai_perolehan: perolehanVal, nilai_buku: calculatedNilaiBuku, updatedAt: serverTimestamp() };
-             const safeId = noKartu.replace(/[^a-zA-Z0-9.-]/g, '_'); batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'prices', safeId), payload, {merge: true}); count++; if (count % 400 === 0) { await batch.commit(); batch = writeBatch(db); setStatus(prev => ({...prev, progress: Math.round((i/jsonData.length)*100)})); }
+  const file = e.target.files[0]; 
+  if (!file || !window.XLSX || !user) return; 
+  setStatus({ ...status, loading: true, progress: 0 });
+
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    try {
+      const arrayData = new Uint8Array(ev.target.result); 
+      const wb = window.XLSX.read(arrayData, { type: 'array' }); 
+      const ws = wb.Sheets[wb.SheetNames[0]]; 
+      const jsonData = window.XLSX.utils.sheet_to_json(ws, { header: 1 });
+      
+      let count = 0; 
+      let batch = writeBatch(db);
+      const injectUnit = { unitId: activeUnitView };
+      const isAppend = status.uploadAppend;
+
+      if (status.uploadType === 'prices') {
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i]; if (!row || row.length < 9) continue;
+          const noKartu = safeString(row[0]).trim(); if (!noKartu) continue;
+          
+          const tglPengadaanVal = row[1] instanceof Date ? row[1].toISOString() : safeString(row[1]);
+          const perolehanVal = typeof row[3] === 'number' ? row[3] : parseFloat(safeString(row[3]).replace(/,/g, '')) || 0;
+          
+          const { masa_manfaat } = parseKodeBarangData(noKartu, kodeBarangData);
+          const calculatedNilaiBuku = calculateNilaiBuku(perolehanVal, tglPengadaanVal, masa_manfaat);
+          let calculatedTglHabis = row[2] instanceof Date ? row[2].toISOString() : safeString(row[2]);
+          const dPengadaan = parseDateRobust(tglPengadaanVal);
+          if (dPengadaan && (!calculatedTglHabis || calculatedTglHabis.trim() === '' || calculatedTglHabis === 'undefined')) {
+              const dHabis = new Date(dPengadaan);
+              dHabis.setFullYear(dHabis.getFullYear() + masa_manfaat);
+              calculatedTglHabis = dHabis.toISOString();
           }
-        } else if (status.uploadType === 'kode_barang') {
-          for (let i = 1; i < jsonData.length; i++) {
-             const row = jsonData[i]; if (!row || !row[0]) continue;
-             const kode = safeString(row[0]).trim();
-             const nama = safeString(row[1]).trim();
-             const masa_manfaat = parseInt(row[2]) || 4;
-             const safeId = kode.replace(/[^a-zA-Z0-9.-]/g, '_');
-             batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'kode_barang', safeId), {
-                 kode, nama, masa_manfaat, updatedAt: serverTimestamp()
-             }, { merge: true }); 
-             count++; if (count % 400 === 0) { await batch.commit(); batch = writeBatch(db); setStatus(prev => ({...prev, progress: Math.round((i/jsonData.length)*100)})); }
+          const payload = { ...injectUnit, nama: safeString(row[8]).trim().toUpperCase(), no_kartu: noKartu, tgl_pengadaan: tglPengadaanVal, tgl_habis: calculatedTglHabis, nilai_perolehan: perolehanVal, nilai_buku: calculatedNilaiBuku, updatedAt: serverTimestamp() };
+          const safeId = noKartu.replace(/[^a-zA-Z0-9.-]/g, '_'); 
+          batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'prices', safeId), payload, {merge: true}); 
+          count++; 
+          if (count % 400 === 0) { await batch.commit(); batch = writeBatch(db); setStatus(prev => ({...prev, progress: Math.round((i/jsonData.length)*100)})); }
+        }
+      } else if (status.uploadType === 'kode_barang') {
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i]; if (!row || !row[0]) continue;
+          const kode = safeString(row[0]).trim();
+          const nama = safeString(row[1]).trim();
+          const masa_manfaat = parseInt(row[2]) || 4;
+          const safeId = kode.replace(/[^a-zA-Z0-9.-]/g, '_');
+          batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'kode_barang', safeId), {
+              kode, nama, masa_manfaat, updatedAt: serverTimestamp()
+          }, { merge: true }); 
+          count++; 
+          if (count % 400 === 0) { await batch.commit(); batch = writeBatch(db); setStatus(prev => ({...prev, progress: Math.round((i/jsonData.length)*100)})); }
+        }
+      } else if (status.uploadType === 'pajak') {
+
+        // ================================
+        // Cari baris header otomatis
+        // ================================
+        let headers = [];
+        let startRow = 0;
+
+        for (let r = 0; r < Math.min(10, jsonData.length); r++) {
+          const rowText = (jsonData[r] || [])
+            .map(x => safeString(x).toLowerCase())
+            .join(" ");
+
+          if (
+            rowText.includes("jenis kendaraan") &&
+            rowText.includes("nomor polisi")
+          ) {
+            headers = (jsonData[r] || []).map(x =>
+              safeString(x).toLowerCase()
+            );
+
+            console.log("HEADER =", headers);
+            console.log("HEADER LENGTH =", headers.length);
+
+            startRow = r + 1;
+            break;
           }
-       } else if (status.uploadType === 'pajak') {
+        }
 
-    for (let i = 0; i < jsonData.length; i++) {
+       const getCol = (keywords, defaultIndex) => {
+        const idx = headers.findIndex(h => {
+            h = safeString(h).toLowerCase();
+            return keywords.some(k => h.includes(k));
+        });
 
-        const row = jsonData[i];
-        if (!row) continue;
+        return idx >= 0 ? idx : defaultIndex;
+        };
 
-        const jenisKendaraan = safeString(row[1]).trim();
-        const noPolisi = safeString(row[3]).trim();
+        console.log(headers);
 
-        if (
+        const colJenis = getCol(["jenis"], 1);
+        const colNopol = getCol(["polisi"], 2);
+        const colRangka = getCol(["rangka"], 3);
+        const colMesin = getCol(["mesin"], 4);
+        const colPemegang = getCol(["pemegang"], 5);
+        const colPajak = getCol(["pajak bulan"], 6);
+        const colPajak5 = getCol(["masa aktif"], 7);
+
+        console.log("HEADER", headers);
+
+        console.log({
+            colJenis,
+            colNopol,
+            colRangka,
+            colMesin,
+            colPemegang,
+            colPajak,
+            colPajak5
+        });
+
+        for (let i = startRow; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          if (i < startRow + 5) {
+                console.log("ROW", row);
+            }
+
+          const jenisKendaraan = safeString(row[colJenis]).trim();
+          const noPolisi = safeString(row[colNopol]).trim();
+
+          if (
             !noPolisi ||
             noPolisi.toLowerCase() === 'nomor polisi' ||
             noPolisi.toUpperCase().includes('NOMOR POLISI')
-        ) continue;
+          ) continue;
 
-        if (
+          if (
             !jenisKendaraan ||
             jenisKendaraan.toLowerCase().includes('roda')
-        ) continue;
+          ) continue;
 
+          // ==========================
+          // NO RANGKA & NO MESIN
+          // ==========================
+          const noRangka = safeString(row[colRangka]).trim();
+          const noMesin  = safeString(row[colMesin]).trim();
 
-        // ==========================
-        // NO RANGKA & NO MESIN
-        // ==========================
+          // ==========================
+          // TANGGAL PAJAK
+          // ==========================
+          let tglPajakRaw = row[colPajak];
+          let tglPajakIso = null;
 
-        const rangkaMesinRaw = safeString(row[4]).trim();
-
-        let noRangka = "";
-        let noMesin = "";
-
-        if (rangkaMesinRaw) {
-
-            // Excel biasanya menyimpan:
-            // NO RANGKA
-            // NO MESIN
-            // dalam satu cell dengan baris baru
-
-            const parts = rangkaMesinRaw
-                .split(/\r?\n/)
-                .map(x => x.trim())
-                .filter(Boolean);
-
-            noRangka = parts[0] || "";
-            noMesin = parts[1] || "";
-        }
-
-
-        // ==========================
-        // TANGGAL PAJAK
-        // ==========================
-
-        let tglPajakRaw = row[6];
-        let tglPajakIso = null;
-
-        if (tglPajakRaw) {
+          if (tglPajakRaw) {
             const parsedDate = parseDateRobust(tglPajakRaw);
-
             if (parsedDate) {
-                tglPajakIso = parsedDate.toISOString();
+              tglPajakIso = parsedDate.toISOString();
             }
-        }
+          }
 
+          // ==========================
+          // SIMPAN KE FIRESTORE
+          // ==========================
+          const safeId = noPolisi.replace(/[^a-zA-Z0-9.-]/g, '_');
 
-        // ==========================
-        // SIMPAN KE FIRESTORE
-        // ==========================
-
-        const safeId = noPolisi.replace(
-            /[^a-zA-Z0-9.-]/g,
-            '_'
-        );
-
-        const payload = {
+          const payload = {
             ...injectUnit,
-
             nama: jenisKendaraan.toUpperCase(),
-
             no_kartu: noPolisi,
-
-            lokasi: safeString(row[5]).trim() || 'N/A',
-
-            no_rangka: noRangka,
-            no_mesin: noMesin,
-
-            tgl_pajak:
-                tglPajakIso ||
-                safeString(tglPajakRaw),
-
+            pemegang: safeString(row[colPemegang]).trim() || '-',
+            lokasi: safeString(row[colPemegang]).trim() || 'N/A',
+            nomor_rangka: noRangka,
+            nomor_mesin: noMesin,
+            tgl_pajak: tglPajakIso || safeString(tglPajakRaw),
             updatedAt: serverTimestamp()
-        };
+          };
 
+          console.log("UPLOAD KENDARAAN:", payload);
 
-        console.log("UPLOAD KENDARAAN:", payload);
+          console.log({
+            jenis: jenisKendaraan,
+            noPolisi,
+            pemegang: safeString(row[colPemegang]).trim(),
+            nomorMesin: noMesin,
+            nomorRangka: noRangka
+          });
 
-
-        batch.set(
-            doc(
-                db,
-                'artifacts',
-                appId,
-                'public',
-                'data',
-                'prices',
-                safeId
-            ),
+          batch.set(
+            doc(db, 'artifacts', appId, 'public', 'data', 'prices', safeId),
             payload,
             { merge: true }
-        );
+          );
 
+          count++;
 
-        count++;
-
-        if (count % 400 === 0) {
-
+          if (count % 400 === 0) {
             await batch.commit();
-
             batch = writeBatch(db);
-
             setStatus(prev => ({
-                ...prev,
-                progress: Math.round(
-                    (i / jsonData.length) * 100
-                )
+              ...prev,
+              progress: Math.round((i / jsonData.length) * 100)
             }));
-        }
-    }
-
-} else if (status.uploadType === 'tanah') {
-        } else if (status.uploadType === 'tanah') {
-            let headers = [], startRow = 0;
-            for(let r = 0; r < Math.min(5, jsonData.length); r++) { const rowStr = (jsonData[r]||[]).map(c=>safeString(c).toLowerCase()).join(' '); if(rowStr.includes('kib') || rowStr.includes('kode') || rowStr.includes('luas') || rowStr.includes('alamat')) { headers = (jsonData[r]||[]).map(c=>safeString(c).toLowerCase()); startRow = r + 1; break; } }
-            const getCol = (k, d) => { if(headers.length === 0) return d; const idx = headers.findIndex(h => k.some(x => h.includes(x))); return idx >= 0 ? idx : d; };
-            const colKib = getCol(['kib', 'kode', 'register'], 0), colNama = getCol(['nama', 'jenis', 'deskripsi'], 1), colTahun = getCol(['tahun', 'peroleh', 'pengadaan'], 2), colLuas = getCol(['luas'], 4), colAlamat = getCol(['alamat', 'letak', 'lokasi'], 5), colHak = getCol(['hak', 'status'], 6), colPenggunaan = getCol(['penggunaan', 'guna'], 7), colPetugas = getCol(['petugas', 'pic'], 8), colTlp = getCol(['tlp', 'telepon', 'hp'], 9), colGmaps = getCol(['maps', 'gmaps', 'koordinat'], 10);
-            
-            const colBiaya = getCol(['biaya', 'pengurusan'], 11);
-            const colPAD = getCol(['pad', 'penerimaan'], 12);
-            const colTarif = getCol(['tarif', 'retribusi'], 13);
-            const colTotal = getCol(['total', 'disewakan'], 14);
-            const colSatuan = getCol(['satuan'], 15);
-            for (let i = startRow; i < jsonData.length; i++) {
-                 const row = jsonData[i]; if (!row) continue;
-                 const kib = safeString(row[colKib]).trim(); if (!kib || kib.toLowerCase().includes('kib') || kib.toLowerCase().includes('nomor')) continue;
-                 const safeId = kib.replace(/[^a-zA-Z0-9.-]/g, '_'); batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'tanah', safeId), { ...injectUnit, kib, deskripsi: safeString(row[colNama]), tgl_peroleh: row[colTahun] instanceof Date ? row[colTahun].toISOString() : safeString(row[colTahun]), luas: safeString(row[colLuas]), alamat: safeString(row[colAlamat]), status_hak: safeString(row[colHak]), penggunaan: safeString(row[colPenggunaan]), petugas: safeString(row[colPetugas]), tlp_petugas: safeString(row[colTlp]), gmaps: safeString(row[colGmaps]), biaya_pengurusan: safeString(row[colBiaya]), penerimaan_pad: safeString(row[colPAD]), tarif_retribusi: safeString(row[colTarif]), total_tarif: safeString(row[colTotal]), satuan_tarif: safeString(row[colSatuan]), updatedAt: serverTimestamp() }, { merge: true }); count++; if (count % 400 === 0) { await batch.commit(); batch = writeBatch(db); setStatus(prev => ({...prev, progress: Math.round((i/jsonData.length)*100)})); }
-            }
-        } else {
-          for (let i = 1; i < jsonData.length; i++) {
-             const row = jsonData[i]; if (!row || !row[2]) continue;
-             if (safeString(row[1]).toUpperCase().includes("DINAS PERKEBUNAN")) continue;
-             const items = [];
-             for (let k = 0; k < 6; k++) { 
-                 const bNama = safeString(row[6 + k]).trim(); 
-                 if (bNama && bNama !== '-' && !bNama.toUpperCase().includes("DINAS PERKEBUNAN")) {
-                     items.push({ nama: bNama.toUpperCase(), merk: safeString(row[12 + k] || '-').trim().toUpperCase(), tahun: safeString(row[18 + k] || '-').trim(), no_kartu: row[24 + k] ? safeString(row[24 + k]).trim() : '' }); 
-                 }
-             }
-             const payload = { 
-                 nama: safeString(row[1] || 'N/A').trim().toUpperCase(), 
-                 nip: safeString(row[2]).trim(), 
-                 skpd: safeString(row[5] || '').trim().toUpperCase(), 
-                 jabatan: safeString(row[4] || '-').trim().toUpperCase(), 
-                 bidang: safeString(row[5] || '-').trim().toUpperCase(), 
-                 lastSync: serverTimestamp() 
-             };
-             
-             if (items.length > 0) {
-                 if (isAppend) {
-                     payload.items = arrayUnion(...items);
-                 } else {
-                     payload.items = items;
-                 }
-             } else if (!isAppend) {
-                 payload.items = [];
-             }
-             batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'pegawai', safeString(row[2]).trim().replace(/\s/g, '')), payload, { merge: true }); count++; if (count % 400 === 0) { await batch.commit(); batch = writeBatch(db); setStatus(prev => ({...prev, progress: Math.round((i/jsonData.length)*100)})); }
           }
         }
-        await batch.commit(); setModals(prev => ({ ...prev, upload: false })); if(document.getElementById('portalSync')) document.getElementById('portalSync').value = ''; customAlert("Berhasil", `Sinkronisasi selesai: ${count} baris data diproses.`);
-      } catch (e) { customAlert("Gagal", "Format tidak valid."); if(document.getElementById('portalSync')) document.getElementById('portalSync').value = ''; }
-      setStatus(prev => ({ ...prev, loading: false, progress: 0 }));
-    };
-    reader.readAsArrayBuffer(file);
+
+      } else if (status.uploadType === 'tanah') {
+        let headers = [], startRow = 0;
+        for(let r = 0; r < Math.min(5, jsonData.length); r++) { 
+          const rowStr = (jsonData[r]||[]).map(c=>safeString(c).toLowerCase()).join(' '); 
+          if(rowStr.includes('kib') || rowStr.includes('kode') || rowStr.includes('luas') || rowStr.includes('alamat')) { 
+            headers = (jsonData[r]||[]).map(c=>safeString(c).toLowerCase()); 
+            startRow = r + 1; 
+            break; 
+          } 
+        }
+        const getCol = (k, d) => { 
+          if(headers.length === 0) return d; 
+          const idx = headers.findIndex(h => k.some(x => h.includes(x))); 
+          return idx >= 0 ? idx : d; 
+        };
+        const colKib = getCol(['kib', 'kode', 'register'], 0), 
+              colNama = getCol(['nama', 'jenis', 'deskripsi'], 1), 
+              colTahun = getCol(['tahun', 'peroleh', 'pengadaan'], 2), 
+              colLuas = getCol(['luas'], 4), 
+              colAlamat = getCol(['alamat', 'letak', 'lokasi'], 5), 
+              colHak = getCol(['hak', 'status'], 6), 
+              colPenggunaan = getCol(['penggunaan', 'guna'], 7), 
+              colPetugas = getCol(['petugas', 'pic'], 8), 
+              colTlp = getCol(['tlp', 'telepon', 'hp'], 9), 
+              colGmaps = getCol(['maps', 'gmaps', 'koordinat'], 10);
+        
+        const colBiaya = getCol(['biaya', 'pengurusan'], 11);
+        const colPAD = getCol(['pad', 'penerimaan'], 12);
+        const colTarif = getCol(['tarif', 'retribusi'], 13);
+        const colTotal = getCol(['total', 'disewakan'], 14);
+        const colSatuan = getCol(['satuan'], 15);
+
+        for (let i = startRow; i < jsonData.length; i++) {
+          const row = jsonData[i]; if (!row) continue;
+          const kib = safeString(row[colKib]).trim(); 
+          if (!kib || kib.toLowerCase().includes('kib') || kib.toLowerCase().includes('nomor')) continue;
+          const safeId = kib.replace(/[^a-zA-Z0-9.-]/g, '_'); 
+          batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'tanah', safeId), { 
+            ...injectUnit, 
+            kib, 
+            deskripsi: safeString(row[colNama]), 
+            tgl_peroleh: row[colTahun] instanceof Date ? row[colTahun].toISOString() : safeString(row[colTahun]), 
+            luas: safeString(row[colLuas]), 
+            alamat: safeString(row[colAlamat]), 
+            status_hak: safeString(row[colHak]), 
+            penggunaan: safeString(row[colPenggunaan]), 
+            petugas: safeString(row[colPetugas]), 
+            tlp_petugas: safeString(row[colTlp]), 
+            gmaps: safeString(row[colGmaps]), 
+            biaya_pengurusan: safeString(row[colBiaya]), 
+            penerimaan_pad: safeString(row[colPAD]), 
+            tarif_retribusi: safeString(row[colTarif]), 
+            total_tarif: safeString(row[colTotal]), 
+            satuan_tarif: safeString(row[colSatuan]), 
+            updatedAt: serverTimestamp() 
+          }, { merge: true }); 
+          count++; 
+          if (count % 400 === 0) { 
+            await batch.commit(); 
+            batch = writeBatch(db); 
+            setStatus(prev => ({...prev, progress: Math.round((i/jsonData.length)*100)})); 
+          }
+        }
+      } else {
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i]; if (!row || !row[2]) continue;
+          if (safeString(row[1]).toUpperCase().includes("DINAS PERKEBUNAN")) continue;
+          const items = [];
+          for (let k = 0; k < 6; k++) { 
+            const bNama = safeString(row[6 + k]).trim(); 
+            if (bNama && bNama !== '-' && !bNama.toUpperCase().includes("DINAS PERKEBUNAN")) {
+              items.push({ 
+                nama: bNama.toUpperCase(), 
+                merk: safeString(row[12 + k] || '-').trim().toUpperCase(), 
+                tahun: safeString(row[18 + k] || '-').trim(), 
+                no_kartu: row[24 + k] ? safeString(row[24 + k]).trim() : '' 
+              }); 
+            }
+          }
+          const payload = { 
+            nama: safeString(row[1] || 'N/A').trim().toUpperCase(), 
+            nip: safeString(row[2]).trim(), 
+            skpd: safeString(row[5] || '').trim().toUpperCase(), 
+            jabatan: safeString(row[4] || '-').trim().toUpperCase(), 
+            bidang: safeString(row[5] || '-').trim().toUpperCase(), 
+            lastSync: serverTimestamp() 
+          };
+          
+          if (items.length > 0) {
+            if (isAppend) {
+              payload.items = arrayUnion(...items);
+            } else {
+              payload.items = items;
+            }
+          } else if (!isAppend) {
+            payload.items = [];
+          }
+          
+          batch.set(doc(db, 'artifacts', appId, 'public', 'data', 'pegawai', safeString(row[2]).trim().replace(/\s/g, '')), payload, { merge: true }); 
+          count++; 
+          if (count % 400 === 0) { 
+            await batch.commit(); 
+            batch = writeBatch(db); 
+            setStatus(prev => ({...prev, progress: Math.round((i/jsonData.length)*100)})); 
+          }
+        }
+      }
+
+      await batch.commit(); 
+      setModals(prev => ({ ...prev, upload: false })); 
+      if(document.getElementById('portalSync')) document.getElementById('portalSync').value = ''; 
+      customAlert("Berhasil", `Sinkronisasi selesai: ${count} baris data diproses.`);
+
+    } catch (e) {
+    console.error("ERROR UPLOAD:", e);
+
+    customAlert(
+        "Gagal",
+        e.message
+    );
+    }
+
+    setStatus(prev => ({ ...prev, loading: false, progress: 0 }));
   };
-  const handleAddItem = async (form) => {
+
+  reader.readAsArrayBuffer(file);
+};
+    const handleAddItem = async (form) => {
     if (!form.nama || !selectedUser || !user) return; setStatus({ ...status, loading: true });
     try {
       const formNoKartu = safeString(form.no_kartu).trim(); const idToUse = formNoKartu ? formNoKartu.replace(/[^a-zA-Z0-9.-]/g, '_') : 'MANUAL_' + Date.now();

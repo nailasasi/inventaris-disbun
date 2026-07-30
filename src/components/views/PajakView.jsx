@@ -1,8 +1,18 @@
-import { Camera, Car, Download, Edit3, PlusCircle, Printer, Upload } from 'lucide-react';
-import React from 'react';
+import { Camera, Car, Download, Edit3, PlusCircle, Printer, Upload, Copy, Check } from 'lucide-react';
+import React, { useState } from 'react';
 import { getSafeDateString, parseDateRobust, safeString } from '../../utils/helpers';
 
 const PajakView = ({ handleExportPajak, handleExportWordSPPBIVehicle, handlePerpanjangPajak, isDarkMode, isReadOnly, pajakSelectedYear, pajakYearsList, setEditPajakModal, setPajakSelectedYear, setPajakYearsList, setPhotoModal, vehicleItems }) => {
+  // State untuk melacak status copy per-item
+  const [copiedField, setCopiedField] = useState(null);
+
+  const handleCopy = (text, key) => {
+    if (!text || text === '-') return;
+    navigator.clipboard.writeText(text);
+    setCopiedField(key);
+    setTimeout(() => setCopiedField(null), 1500);
+  };
+
   return (
     <div className={`rounded-[2rem] md:rounded-[3rem] shadow-xl border overflow-hidden ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white'}`}>
       <div className={`p-6 md:p-8 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${isDarkMode ? 'bg-slate-800/50 border-slate-700' : 'bg-slate-50'}`}>
@@ -41,22 +51,24 @@ const PajakView = ({ handleExportPajak, handleExportWordSPPBIVehicle, handlePerp
         </div>
       </div>
       <div className="p-4 md:p-8 overflow-x-auto">
-        <table className="w-full text-left min-w-[900px]">
+        <table className="w-full text-left min-w-[1300px]">
           <thead>
             <tr className={`text-xs font-black text-slate-400 border-b ${isDarkMode ? 'border-slate-700' : ''}`}>
-              <th className="pb-4">Kendaraan</th>
-              <th className="pb-4">Pemegang</th>
-              <th className="pb-4">Tgl Pajak (Masa Berlaku)</th>
-              <th className="pb-4 text-center">Pajak 5 Tahunan</th>
-              <th className="pb-4 text-center">Status</th>
-              <th className="pb-4 text-center">Foto Kendaraan</th>
-              <th className="pb-4 text-center">Bukti Bayar {pajakSelectedYear}</th>
-              <th className="pb-4 text-center">Aksi</th>
+              <th className="pb-4 px-4 whitespace-nowrap">Kendaraan</th>
+              <th className="pb-4 px-4 whitespace-nowrap">Pemegang</th>
+              <th className="pb-4 px-4 whitespace-nowrap w-40">Nomor Mesin</th>
+              <th className="pb-4 px-4 whitespace-nowrap w-52">Nomor Rangka</th>
+              <th className="pb-4 px-4 whitespace-nowrap">Tgl Pajak (Masa Berlaku)</th>
+              <th className="pb-4 px-4 text-center whitespace-nowrap">Pajak 5 Tahunan</th>
+              <th className="pb-4 px-4 text-center whitespace-nowrap">Status</th>
+              <th className="pb-4 px-4 text-center whitespace-nowrap">Foto Kendaraan</th>
+              <th className="pb-4 px-4 text-center whitespace-nowrap">Bukti Bayar {pajakSelectedYear}</th>
+              <th className="pb-4 px-4 text-center whitespace-nowrap">Aksi</th>
             </tr>
           </thead>
           <tbody className={`divide-y ${isDarkMode ? 'divide-slate-700' : ''}`}>
             {vehicleItems.length === 0 ? (
-              <tr><td colSpan="8" className="text-center py-10 text-slate-400 font-bold">Tidak ada data kendaraan terdeteksi.</td></tr>
+              <tr><td colSpan="10" className="text-center py-10 text-slate-400 font-bold">Tidak ada data kendaraan terdeteksi.</td></tr>
             ) : (
               vehicleItems.map((it, i) => {
                 const tglMasa = parseDateRobust(getSafeDateString(it.tgl_pajak) || getSafeDateString(it.tgl_pengadaan));
@@ -72,32 +84,69 @@ const PajakView = ({ handleExportPajak, handleExportWordSPPBIVehicle, handlePerp
                 }
 
                 const currentBukti = it[`pajak_history.${pajakSelectedYear}`] || null;
-                console.log("CURRENT BUKTI =", currentBukti);
+                
+                const noMesin = safeString(it.nomor_mesin || it.no_mesin || '-');
+                const noRangka = safeString(it.nomor_rangka || it.no_rangka || '-');
                 
                 return (
                   <tr key={i} className={isDarkMode ? 'hover:bg-slate-700/50' : 'hover:bg-slate-50'}>
-                    <td className="py-4">
+                    <td className="py-4 px-4 whitespace-nowrap">
                       <p className="font-bold text-sm">{safeString(it.nama)}</p>
                       <p className="text-xs text-slate-400 font-mono">{safeString(it.no_kartu)}</p>
                     </td>
-                    <td className="py-4 text-sm font-bold text-slate-500">
-                      <div className="flex items-start gap-2">
-                        <span className="leading-snug break-words max-w-[160px] md:max-w-[200px]">
+                    <td className="py-4 px-4 whitespace-nowrap text-sm font-bold text-slate-500">
+                      <div className="flex items-center gap-2">
+                        <span className="leading-snug">
                           {it.pemegang !== '-' ? safeString(it.pemegang) : (it.ruangan !== '-' ? safeString(it.ruangan) : safeString(it.lokasi || 'N/A'))}
                         </span>
                         {!isReadOnly && (
-                          <button onClick={() => setEditPajakModal({ show: true, item: it })} className="text-emerald-500 p-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 rounded shrink-0 mt-0.5" title="Edit Pemegang">
+                          <button onClick={() => setEditPajakModal({ show: true, item: it })} className="text-emerald-500 p-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 rounded shrink-0" title="Edit Pemegang">
                             <Edit3 size={14} />
                           </button>
                         )}
                       </div>
                     </td>
-                    <td className="py-4 text-sm font-bold">
+
+                    {/* NOMOR MESIN */}
+                    <td className="py-4 px-4 whitespace-nowrap text-xs font-mono font-semibold text-slate-600 dark:text-slate-300 w-40">
+                      <div className="flex items-center gap-1.5">
+                        <span>{noMesin}</span>
+                        {noMesin !== '-' && (
+                          <button
+                            onClick={() => handleCopy(noMesin, `mesin-${i}`)}
+                            className="text-slate-400 hover:text-emerald-600 p-1 rounded transition-colors"
+                            title="Salin No Mesin"
+                          >
+                            {copiedField === `mesin-${i}` ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* NOMOR RANGKA */}
+                    <td className="py-4 px-4 whitespace-nowrap text-xs font-mono font-semibold text-slate-600 dark:text-slate-300 w-52">
+                      <div className="flex items-center gap-1.5">
+                        <span title={noRangka} className="max-w-[150px] truncate">
+                          {noRangka}
+                        </span>
+                        {noRangka !== '-' && (
+                          <button
+                            onClick={() => handleCopy(noRangka, `rangka-${i}`)}
+                            className="text-slate-400 hover:text-emerald-600 p-1 rounded transition-colors shrink-0"
+                            title="Salin No Rangka"
+                          >
+                            {copiedField === `rangka-${i}` ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="py-4 px-4 whitespace-nowrap text-sm font-bold">
                         {tglMasa ? tglMasa.toLocaleDateString("id-ID") : "-"}
                     </td>
 
                     {/* PAJAK 5 TAHUNAN */}
-                    <td className="py-4 text-center">
+                    <td className="py-4 px-4 text-center whitespace-nowrap">
                         <span
                             className={`px-3 py-1 rounded-full text-[10px] font-black ${
                                 pajak5Tahunan
@@ -110,7 +159,7 @@ const PajakView = ({ handleExportPajak, handleExportWordSPPBIVehicle, handlePerp
                     </td>
 
                     {/* STATUS */}
-                    <td className="py-4 text-center">
+                    <td className="py-4 px-4 text-center whitespace-nowrap">
                         {tglMasa && (
                             <span
                                 className={`px-3 py-1 rounded-full text-[10px] font-black ${
@@ -129,7 +178,7 @@ const PajakView = ({ handleExportPajak, handleExportWordSPPBIVehicle, handlePerp
                     </td>
 
                     {/* FOTO KENDARAAN */}
-                    <td className="py-4 text-center">
+                    <td className="py-4 px-4 text-center whitespace-nowrap">
                       {it.photoBase64 ? (
                         <button
                           onClick={() =>
@@ -189,7 +238,7 @@ const PajakView = ({ handleExportPajak, handleExportWordSPPBIVehicle, handlePerp
                     </td>
 
                     {/* BUKTI BAYAR */}
-                    <td className="py-4 text-center">
+                    <td className="py-4 px-4 text-center whitespace-nowrap">
                       {currentBukti ? (
                         <div className="flex flex-col gap-2 items-center">
                           <button
@@ -217,8 +266,6 @@ const PajakView = ({ handleExportPajak, handleExportWordSPPBIVehicle, handlePerp
                                 window.open(bukti, '_blank');
                               }
                           }}
-
-                      
                             className="text-xs text-blue-600 font-bold hover:underline border border-blue-200 px-2 py-1 rounded"
                           >
                             Lihat Bukti
@@ -280,7 +327,7 @@ const PajakView = ({ handleExportPajak, handleExportWordSPPBIVehicle, handlePerp
                         <span className="text-xs text-slate-400 italic">Kosong</span>
                       )}
                     </td>
-                    <td className="py-4 text-center flex flex-col gap-2 justify-center items-center">
+                    <td className="py-4 px-4 text-center whitespace-nowrap flex flex-col gap-2 justify-center items-center">
                       {!isReadOnly && (
                         <button onClick={() => handlePerpanjangPajak(it)} className="px-3 py-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs font-bold rounded hover:bg-emerald-100 transition-colors w-full">+ 1 Tahun</button>
                       )}
