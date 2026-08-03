@@ -8,6 +8,7 @@ import {
   Upload,
   Copy,
   Check,
+  Trash2,
 } from "lucide-react";
 import React, { useState } from "react";
 import {
@@ -20,6 +21,9 @@ const PajakView = ({
   handleExportPajak,
   handleExportWordSPPBIVehicle,
   handlePerpanjangPajak,
+  handleAddVehicle,
+  handleEditVehicle,
+  handleDeleteVehicle,
   isDarkMode,
   isReadOnly,
   pajakSelectedYear,
@@ -92,6 +96,16 @@ const PajakView = ({
           >
             <PlusCircle size={16} />
           </button>
+          {!isReadOnly && (
+            <button
+              onClick={handleAddVehicle}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-xl font-bold flex items-center gap-2 text-xs hover:bg-emerald-700 transition-colors"
+            >
+              <PlusCircle size={16} />
+              Tambah Kendaraan
+            </button>
+          )}
+
           <button
             onClick={handleExportPajak}
             className="px-4 py-2 bg-blue-600 text-white rounded-xl font-bold flex items-center gap-2 text-xs hover:bg-blue-700 transition-colors ml-auto md:ml-2"
@@ -146,6 +160,14 @@ const PajakView = ({
           ) : (
               vehicleItems.map((it, i) => {
 
+                  const tglMasa = parseDateRobust(
+                  getSafeDateString(it.tgl_pajak) ||
+                  getSafeDateString(it.tgl_pengadaan)
+                );
+
+                const tglPajak5 = parseDateRobust(
+                  getSafeDateString(it.tgl_pajak_5_tahun)
+                );
 
                 let diffDays = 0;
                 let warning = false;
@@ -263,9 +285,6 @@ const PajakView = ({
                       {tglPajak5 ? tglPajak5.toLocaleDateString("id-ID") : "-"}
                     </td>
 
-                    <td className="py-4 px-4 whitespace-nowrap text-sm font-bold">
-                        {tglPajak5 ? tglPajak5.toLocaleDateString("id-ID") : "-"}
-                    </td>
 
                     {/* PAJAK 5 TAHUNAN */}
                     <td className="py-4 px-4 text-center whitespace-nowrap">
@@ -456,6 +475,24 @@ const PajakView = ({
                       )}
                     </td>
                     <td className="py-4 px-4 text-center whitespace-nowrap flex flex-col gap-2 justify-center items-center">
+                      {!isReadOnly && (
+                            <button
+                                onClick={() => handleEditVehicle(it)}
+                                className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded text-xs font-bold hover:bg-yellow-200 transition-colors flex justify-center items-center gap-1 w-full"
+                            >
+                                <Edit3 size={12} />
+                                Edit
+                            </button>
+                        )}
+                      {!isReadOnly && (
+                          <button
+                              onClick={() => handleDeleteVehicle(it)}
+                              className="px-3 py-1 bg-red-100 text-red-700 rounded text-xs font-bold hover:bg-red-200 transition-colors flex justify-center items-center gap-1 w-full"
+                          >
+                              <Trash2 size={12} />
+                              Hapus
+                          </button>
+                      )}
                       {/*
                       {!isReadOnly && (
                         <button
@@ -465,6 +502,7 @@ const PajakView = ({
                           + 1 Tahun
                         </button>
                       )}
+                        
                       */}
                       <button
                         onClick={() => handleExportWordSPPBIVehicle(it)}
