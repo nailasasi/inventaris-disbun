@@ -863,7 +863,7 @@ const generateSPPKD = async (
         const colMesin = getCol(["mesin"], 4);
         const colPemegang = getCol(["pemegang"], 5);
         const colPajak = getCol(["pajak bulan"], 6);
-        const colPajak5 = getCol(["masa aktif"], 7);
+        const colPajak5 = getCol(["5 tahun"], 7);
 
         console.log("HEADER", headers);
 
@@ -930,6 +930,8 @@ const generateSPPKD = async (
             nomor_rangka: noRangka,
             nomor_mesin: noMesin,
             tgl_pajak: tglPajakIso || safeString(tglPajakRaw),
+            tgl_pajak_5_tahun:
+            tglPajak5Iso || safeString(tglPajak5Raw),
             updatedAt: serverTimestamp()
           };
 

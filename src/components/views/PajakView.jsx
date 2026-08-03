@@ -59,6 +59,7 @@ const PajakView = ({ handleExportPajak, handleExportWordSPPBIVehicle, handlePerp
               <th className="pb-4 px-4 whitespace-nowrap w-40">Nomor Mesin</th>
               <th className="pb-4 px-4 whitespace-nowrap w-52">Nomor Rangka</th>
               <th className="pb-4 px-4 whitespace-nowrap">Tgl Pajak (Masa Berlaku)</th>
+              <th className="pb-4 px-4 whitespace-nowrap">Tgl Pajak 5 Tahun</th>
               <th className="pb-4 px-4 text-center whitespace-nowrap">Pajak 5 Tahunan</th>
               <th className="pb-4 px-4 text-center whitespace-nowrap">Status</th>
               <th className="pb-4 px-4 text-center whitespace-nowrap">Foto Kendaraan</th>
@@ -68,10 +69,11 @@ const PajakView = ({ handleExportPajak, handleExportWordSPPBIVehicle, handlePerp
           </thead>
           <tbody className={`divide-y ${isDarkMode ? 'divide-slate-700' : ''}`}>
             {vehicleItems.length === 0 ? (
-              <tr><td colSpan="10" className="text-center py-10 text-slate-400 font-bold">Tidak ada data kendaraan terdeteksi.</td></tr>
+              <tr><td colSpan="11" className="text-center py-10 text-slate-400 font-bold">Tidak ada data kendaraan terdeteksi.</td></tr>
             ) : (
               vehicleItems.map((it, i) => {
                 const tglMasa = parseDateRobust(getSafeDateString(it.tgl_pajak) || getSafeDateString(it.tgl_pengadaan));
+                const tglMasa5 = parseDateRobust(getSafeDateString(it.tgl_pajak_5_tahun));
 
                 let diffDays = 0;
                 let warning = false;
@@ -143,6 +145,10 @@ const PajakView = ({ handleExportPajak, handleExportWordSPPBIVehicle, handlePerp
 
                     <td className="py-4 px-4 whitespace-nowrap text-sm font-bold">
                         {tglMasa ? tglMasa.toLocaleDateString("id-ID") : "-"}
+                    </td>
+
+                    <td className="py-4 px-4 whitespace-nowrap text-sm font-bold">
+                        {tglMasa5 ? tglMasa5.toLocaleDateString("id-ID") : "-"}
                     </td>
 
                     {/* PAJAK 5 TAHUNAN */}
