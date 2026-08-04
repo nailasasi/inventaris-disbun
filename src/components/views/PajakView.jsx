@@ -9,6 +9,7 @@ import {
   Copy,
   Check,
   Trash2,
+  History,
 } from "lucide-react";
 import React, { useState } from "react";
 import {
@@ -24,6 +25,7 @@ const PajakView = ({
   handleAddVehicle,
   handleEditVehicle,
   handleDeleteVehicle,
+  handleVehicleHistory,
   isDarkMode,
   isReadOnly,
   pajakSelectedYear,
@@ -491,6 +493,15 @@ const PajakView = ({
                           >
                               <Trash2 size={12} />
                               Hapus
+                          </button>
+                      )}
+                      {!isReadOnly && (
+                          <button
+                              onClick={() => handleVehicleHistory(it)}
+                              className="px-3 py-1 bg-sky-100 text-sky-700 rounded text-xs font-bold hover:bg-sky-200 transition-colors flex justify-center items-center gap-1 w-full"
+                          >
+                              <History size={12} />
+                              Riwayat
                           </button>
                       )}
                       {/*

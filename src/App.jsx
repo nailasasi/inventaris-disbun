@@ -123,6 +123,8 @@ import { buildBarangData, buildBastBarangData } from "./utils/exportHelpers";
 import { buildBastKendaraanData } from "./utils/exportHelpers";
 import { terbilang, capitalize } from "./utils/helpers";
 import ModalVehicle from "./components/modals/ModalVehicle";
+import ModalVehicleHistory from "./components/modals/ModalVehicleHistory";
+import { getDoc } from "firebase/firestore";
 
 const App = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -184,6 +186,10 @@ const App = () => {
   const [vehicleModal, setVehicleModal] = useState({
       show: false,
       item: null
+  });
+  const [vehicleHistoryModal, setVehicleHistoryModal] = useState({
+      show: false,
+      history: [],
   });
   const [transferUnitModal, setTransferUnitModal] = useState({
     show: false,
@@ -705,19 +711,19 @@ const App = () => {
           );
 
       assetMap[key] = {
-        id: key,
+          id: key,
+          ...item,
 
-        ...item,
+          id: item.id || key,
 
-        nilai_buku: liveNilaiBuku,
-        tgl_habis: dynTglHabis,
-        diffDays: diff,
-        isExpired: expired,
-
-        pemegang,
-        ruangan,
-        skpd: "-",
-    };
+          nilai_buku: liveNilaiBuku,
+          tgl_habis: dynTglHabis,
+          diffDays: diff,
+          isExpired: expired,
+          pemegang,
+          ruangan,
+          skpd: "-",
+      };
     });
     console.log("PEGAWAI DATA", filteredPegawaiData);
 
@@ -792,8 +798,8 @@ const App = () => {
           }
 
           assetMap[cleanNo || `pegawai_${p.nip}_${idx}_${Math.random()}`] = {
-            id: cleanNo,
             ...it,
+            id: cleanNo,
             pemegang: p.nama,
             ruangan: "-",
             skpd: p.skpd || p.bidang || "-",
@@ -859,21 +865,36 @@ const App = () => {
           assetMap[
             cleanNo || `ruangan_${r.nama_ruangan}_${idx}_${Math.random()}`
           ] = {
+
             ...it,
+
+            id: cleanNo,
+
             pemegang: "-",
             ruangan: r.nama_ruangan,
             skpd: "-",
+
             tgl_pengadaan: it.tahun,
             tgl_habis: dynTglHabis,
+
             nilai_perolehan: 0,
             nilai_buku: 0,
+
             diffDays: diff,
             isExpired: expired,
+
             no_kartu: it.no_kartu || "-",
           };
         }
       });
     });
+    console.log(
+      "ASSET MAP DUMMY",
+      Object.values(assetMap).find((x) =>
+        safeString(x.nama).includes("Dummy MITSUBISHI")
+      )
+    );
+
     return Object.values(assetMap)
       .map((i) => {
         const isManuallyDisposed = i.manual_disposal === true;
@@ -897,21 +918,10 @@ const App = () => {
       })
       .filter((i) => {
         if (monitoringSelectedYear !== "Semua") {
-          const thn =
-            parseDateRobust(getSafeDateString(i.tgl_pengadaan))
-              ?.getFullYear()
-              ?.toString() || safeString(i.tgl_pengadaan || i.tahun || "");
+          const thn = parseDateRobust(getSafeDateString(i.tgl_pengadaan))?.getFullYear()?.toString()
+            || safeString(i.tgl_pengadaan || i.tahun || "");
           if (thn && !thn.includes(monitoringSelectedYear)) return false;
         }
-        if (monitoringSearch)
-          return (
-            safeString(i.nama)
-              .toLowerCase()
-              .includes(monitoringSearch.toLowerCase()) ||
-            safeString(i.no_kartu)
-              .toLowerCase()
-              .includes(monitoringSearch.toLowerCase())
-          );
         return true;
       })
       .sort((a, b) => a.diffDays - b.diffDays);
@@ -926,12 +936,18 @@ const App = () => {
     activeUnitView,
     kodeBarangData,
   ]);
-  const activeMonitoringData = monitoringDataFiltered.filter(
-    (x) => !x._disposal || x.manual_active,
-  );
-  const disposalData = monitoringDataFiltered.filter(
-    (x) => x._disposal && !x.manual_active,
-  );
+  const matchesSearch = (i) =>
+  !monitoringSearch ||
+  safeString(i.nama).toLowerCase().includes(monitoringSearch.toLowerCase()) ||
+  safeString(i.no_kartu).toLowerCase().includes(monitoringSearch.toLowerCase());
+
+const activeMonitoringData = monitoringDataFiltered
+  .filter((x) => !x._disposal || x.manual_active)
+  .filter(matchesSearch);
+
+const disposalData = monitoringDataFiltered
+  .filter((x) => (x.manual_disposal || x._disposal) && !x.manual_active)
+  .filter(matchesSearch);
   const currentRoomData = filteredRuanganData.find(
     (doc) => doc.nama_ruangan === selectedRoomName,
   ) || { items: [] };
@@ -945,7 +961,8 @@ const App = () => {
       0,
     );
   const vehicleItems = monitoringDataFiltered.filter((i) => {
-    if (i.manual_disposal) return false;
+    // Jangan tampilkan kendaraan yang sudah masuk usulan penghapusan
+    if (i._disposal) return false;
 
     const n = safeString(i.nama).toLowerCase();
 
@@ -962,6 +979,12 @@ const App = () => {
     return isVehicle || i.tgl_pajak;
   });
   console.log("VEHICLE ITEMS", vehicleItems);
+  console.log(
+    "DUMMY VEHICLE",
+    vehicleItems.filter((x) =>
+      safeString(x.nama).includes("Dummy")
+    )
+  );
   const filteredTanahDataFinal = filteredTanahDataForView.filter(
     (t) =>
       safeString(t.kib).toLowerCase().includes(tanahSearch.toLowerCase()) ||
@@ -1097,21 +1120,27 @@ const App = () => {
         const t = {};
 
         s.forEach((d) => {
-          if (d.data().nama?.toUpperCase().includes("TOYOTA")) {
-              console.log("DATA TOYOTA", JSON.stringify(d.data(), null, 2));
-          }
+
+          console.log("DOC ID =", d.id);
+          console.log("DOC DATA =", d.data());
 
           t[d.id] = {
             id: d.id,
             ...d.data(),
           };
+
+          console.log("HASIL =", t[d.id]);
+
+          if (d.data().nama?.toUpperCase().includes("TOYOTA")) {
+              console.log("DATA TOYOTA", JSON.stringify(d.data(), null, 2));
+          }
+
         });
 
         setPriceData(t);
       },
-      (err) => console.error(err),
-    );
-    const unsubKB = onSnapshot(
+      );
+  const unsubKB = onSnapshot(
       collection(db, "artifacts", appId, "public", "data", "kode_barang"),
       (s) => {
         const t = [];
@@ -2670,20 +2699,9 @@ const App = () => {
     customConfirm(title, msg, "info", async () => {
       setStatus({ ...status, loading: true });
       try {
-        const safeId = item.no_kartu
-          ? safeString(item.no_kartu)
-              .trim()
-              .replace(/[^a-zA-Z0-9.-]/g, "_")
-          : safeString(item.nama)
-              .toUpperCase()
-              .replace(/[^a-zA-Z0-9]/g, "_")
-              .substring(0, 100);
+        const safeId = item.id;
         const payload = isManual
-          ? {
-              manual_disposal: false,
-              alasan_hapus: "",
-              updatedAt: serverTimestamp(),
-            }
+          ? { manual_disposal: false, manual_active: true, alasan_hapus: "", updatedAt: serverTimestamp() }
           : { manual_active: true, updatedAt: serverTimestamp() };
         await setDoc(
           doc(db, "artifacts", appId, "public", "data", "prices", safeId),
@@ -2706,23 +2724,31 @@ const App = () => {
         try {
           const safeId = item.id;
 
+        console.log("DELETE ID =", item.id);
+        console.log("DELETE NO_KARTU =", item.no_kartu);
+
           await setDoc(
-            doc(
-              db,
-              "artifacts",
-              appId,
-              "public",
-              "data",
-              "prices",
-              safeId
-            ),
+            doc(db, "artifacts", appId, "public", "data", "prices", safeId),
             {
               manual_disposal: true,
+              manual_active: false,
               alasan_hapus: "Dihapus dari menu Pajak Kendaraan",
               updatedAt: serverTimestamp(),
             },
             { merge: true }
           );
+
+          const snap = await getDoc(
+            doc(db, "artifacts", appId, "public", "data", "prices", safeId)
+          );
+
+          console.log("SETELAH DELETE =", snap.data());
+          if (snap.id === "w_1571_ap") {
+            console.log("SNAP DUMMY =", {
+              id: snap.id,
+              ...snap.data(),
+            });
+          }
 
           customAlert(
             "Berhasil",
@@ -2764,24 +2790,32 @@ const App = () => {
       setModals({ ...modals, manualDisposal: false });
     } catch (e) {}
     setStatus({ ...status, loading: false });
-  };
-  const processPermanentDisposal = async (item, password) => {
+  };const processPermanentDisposal = async (item, password) => {
     if (password !== "SugengR" && password !== "AchmarA")
       return customAlert("Gagal", "Password salah!");
+    
     setStatus({ ...status, loading: true });
+    
     try {
-      const safeId = item.no_kartu
-        ? safeString(item.no_kartu)
-            .trim()
-            .replace(/[^a-zA-Z0-9.-]/g, "_")
-        : safeString(item.nama)
-            .toUpperCase()
-            .replace(/[^a-zA-Z0-9]/g, "_")
-            .substring(0, 100);
+      const safeId = item.id;
+      const targetRef = doc(db, "artifacts", appId, "public", "data", "prices", safeId);
+      
+      // Safety Net: Cek keberadaan dokumen sebelum melakukan delete & update batch
+      const snap = await getDoc(targetRef);
+      if (!snap.exists()) {
+        setStatus({ ...status, loading: false });
+        return customAlert(
+          "Gagal",
+          "Dokumen kendaraan tidak ditemukan (ID tidak cocok). Hubungi admin."
+        );
+      }
+
       const b = writeBatch(db);
 
-      b.delete(doc(db, "artifacts", appId, "public", "data", "prices", safeId));
+      // Hapus dokumen utama dari koleksi 'prices'
+      b.delete(targetRef);
 
+      // Hapus item dari daftar Pegawai (jika ada)
       if (item.pemegang && item.pemegang !== "-") {
         const pUser = (data || []).find((p) => p.nama === item.pemegang);
         if (pUser) {
@@ -2801,7 +2835,9 @@ const App = () => {
             { items: newItems },
           );
         }
-      } else if (item.ruangan && item.ruangan !== "-") {
+      } 
+      // Atau hapus item dari daftar Ruangan (jika ada)
+      else if (item.ruangan && item.ruangan !== "-") {
         const rData = (ruanganData || []).find(
           (r) =>
             r.nama_ruangan === item.ruangan &&
@@ -2817,8 +2853,11 @@ const App = () => {
           );
         }
       }
+
+      // Catat ke histori penghapusan
       const editorName =
         password === "SugengR" ? "Sugeng Riyanto" : "Achmar Adrian";
+        
       b.set(
         doc(collection(db, "artifacts", appId, "public", "data", "histori")),
         {
@@ -2833,7 +2872,9 @@ const App = () => {
         },
       );
 
+      // Eksekusi semua perintah batch secara atomik
       await b.commit();
+      
       customAlert(
         "Berhasil",
         "Aset telah dihapus permanen dari sistem dan dari daftar ruangan/pegawai terkait.",
@@ -2841,6 +2882,7 @@ const App = () => {
     } catch (e) {
       customAlert("Gagal", "Terjadi kesalahan saat menghapus permanen.");
     }
+    
     setStatus({ ...status, loading: false });
   };
   const handlePerpanjangPajak = async (item) => {
@@ -2924,9 +2966,33 @@ const App = () => {
   };
 
   const handleEditVehicle = (item) => {
+
+      console.log("ITEM EDIT =", item);
+
+      console.log("item.id =", item.id);
+      console.log("item.no_kartu =", item.no_kartu);
+
+      console.log("priceData[item.id] =", priceData[item.id]);
+
+      console.log(
+        "priceData[safeString(item.no_kartu)] =",
+        priceData[safeString(item.no_kartu)]
+      );
+
+      console.log(
+        "SEMUA KEY PRICE DATA =",
+        Object.keys(priceData)
+      );
+
       setVehicleModal({
           show: true,
           item,
+      });
+  };
+    const handleVehicleHistory = (item) => {
+      setVehicleHistoryModal({
+          show: true,
+          history: item.nomor_polisi_history || [],
       });
   };
 const processSaveVehicle = async (vehicleData) => {
@@ -2938,15 +3004,12 @@ const processSaveVehicle = async (vehicleData) => {
     }));
 
     try {
-      const oldId = vehicleModal.item?.id || "";
       const oldData = vehicleModal.item || null;
 
       // Generasi ID Baru berdasarkan Plat Nomor yang diinput/diedit
-      const newId = vehicleData.no_kartu
-        ? safeString(vehicleData.no_kartu)
-            .trim()
-            .replace(/[^a-zA-Z0-9.-]/g, "_")
-        : oldId || `KENDARAAN_${Date.now()}`;
+      const documentId =
+          oldData?.id ||
+          `KENDARAAN_${Date.now()}`;
 
       let nomorPolisiHistory = oldData?.nomor_polisi_history || [];
 
@@ -2983,36 +3046,28 @@ const processSaveVehicle = async (vehicleData) => {
       
       delete payload.id;
 
+      console.log("EDIT MODE =", !!vehicleModal.item);
+      console.log("DOCUMENT ID =", documentId);
+      console.log("OLD PLAT =", oldData?.no_kartu);
+      console.log("NEW PLAT =", vehicleData.no_kartu);
+      console.log("HISTORY =", nomorPolisiHistory);
+
       // 1. Simpan/Update dokumen ke ID Baru
       await setDoc(
-        doc(
+      doc(
           db,
           "artifacts",
           appId,
           "public",
           "data",
           "prices",
-          newId
-        ),
+          documentId
+      ),
         payload,
         { merge: true }
       );
 
       // 2. Hapus dokumen lama HANYA jika sedang mode edit dan ID/plat nomor berubah
-      if (vehicleModal.item && oldId && oldId !== newId) {
-        await deleteDoc(
-          doc(
-            db,
-            "artifacts",
-            appId,
-            "public",
-            "data",
-            "prices",
-            oldId
-          )
-        );
-      }
-
       customAlert(
         "Berhasil",
         vehicleModal.item
@@ -3125,13 +3180,18 @@ const processSaveVehicle = async (vehicleData) => {
     if (!item || !user) return;
     setStatus({ ...status, loading: true });
     try {
-      const safeId = item.no_kartu
-        ? safeString(item.no_kartu).replace(/[^a-zA-Z0-9.-]/g, "_")
-        : safeString(item.nama)
-            .replace(/[^a-zA-Z0-9]/g, "_")
-            .substring(0, 100);
+      const documentId = item.id;
+
       await setDoc(
-        doc(db, "artifacts", appId, "public", "data", "prices", safeId),
+        doc(
+          db,
+          "artifacts",
+          appId,
+          "public",
+          "data",
+          "prices",
+          documentId
+        ),
         {
           nilai_perolehan: parseFloat(nilaiPerolehanBaru) || 0,
           nilai_buku: parseFloat(nilaiBukuBaru) || 0,
@@ -3281,14 +3341,7 @@ const processSaveVehicle = async (vehicleData) => {
       // PAJAK
       // ==========================
       else if (photoModal.isPajak) {
-        const safeId = photoModal.item.no_kartu
-          ? safeString(photoModal.item.no_kartu)
-              .trim()
-              .replace(/[^a-zA-Z0-9.-]/g, "_")
-          : safeString(photoModal.item.nama)
-              .toUpperCase()
-              .replace(/[^a-zA-Z0-9]/g, "_")
-              .substring(0, 100);
+        const documentId = photoModal.item.id;
 
         const today = new Date();
 
@@ -3358,14 +3411,7 @@ const processSaveVehicle = async (vehicleData) => {
       // DEFAULT
       // ==========================
       else {
-        const safeId = photoModal.item.no_kartu
-          ? safeString(photoModal.item.no_kartu)
-              .trim()
-              .replace(/[^a-zA-Z0-9.-]/g, "_")
-          : safeString(photoModal.item.nama)
-              .toUpperCase()
-              .replace(/[^a-zA-Z0-9]/g, "_")
-              .substring(0, 100);
+        const documentId = photoModal.item.id;
 
         await setDoc(
           doc(db, "artifacts", appId, "public", "data", "prices", safeId),
@@ -4637,6 +4683,7 @@ const processSaveVehicle = async (vehicleData) => {
             handlePerpanjangPajak={handlePerpanjangPajak}
             handleAddVehicle={handleAddVehicle}
             handleEditVehicle={handleEditVehicle}
+            handleVehicleHistory={handleVehicleHistory}
             isDarkMode={isDarkMode}
             isReadOnly={isReadOnly}
             pajakSelectedYear={pajakSelectedYear}
@@ -4898,7 +4945,7 @@ const processSaveVehicle = async (vehicleData) => {
           statusLoading={status.loading}
         />
       )}
-            <ModalVehicle
+      <ModalVehicle
           show={vehicleModal.show}
           initialData={vehicleModal.item}
           statusLoading={status.loading}
@@ -4909,6 +4956,16 @@ const processSaveVehicle = async (vehicleData) => {
               })
           }
           onSave={processSaveVehicle}
+      />
+      <ModalVehicleHistory
+          show={vehicleHistoryModal.show}
+          history={vehicleHistoryModal.history}
+          onClose={() =>
+              setVehicleHistoryModal({
+                  show: false,
+                  history: [],
+              })
+          }
       />
       {editTanahModal.show && (
         <ModalEditTanah
