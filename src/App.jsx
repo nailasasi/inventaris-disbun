@@ -68,6 +68,8 @@ import {
   arrayUnion,
   serverTimestamp,
   addDoc,
+  getDoc,
+  getDocFromServer,
 } from "firebase/firestore";
 import {
   signInAnonymously,
@@ -90,6 +92,7 @@ import {
   formatDisplayDate,
   getSafeDateString,
 } from "./utils/helpers";
+
 import { exportLabelWord } from "./utils/exportLabelWord";
 import ModalFeedback from "./components/modals/ModalFeedback";
 import ModalBulkLabelExport from "./components/modals/ModalBulkLabelExport";
@@ -124,7 +127,7 @@ import { buildBastKendaraanData } from "./utils/exportHelpers";
 import { terbilang, capitalize } from "./utils/helpers";
 import ModalVehicle from "./components/modals/ModalVehicle";
 import ModalVehicleHistory from "./components/modals/ModalVehicleHistory";
-import { getDoc } from "firebase/firestore";
+
 
 const App = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -322,14 +325,29 @@ const App = () => {
       return !matchP2BTP && !matchPSBP;
     });
   }, [data, activeUnitView]);
+
   const filteredPriceData = useMemo(() => {
-    const res = {};
-    Object.keys(priceData).forEach((k) => {
-      if ((priceData[k].unitId || UNIT_CODES.PUSAT) === activeUnitView)
-        res[k] = priceData[k];
-    });
-    return res;
-  }, [priceData, activeUnitView]);
+  const res = {};
+
+  Object.keys(priceData).forEach((k) => {
+    if ((priceData[k].unitId || UNIT_CODES.PUSAT) === activeUnitView) {
+      res[k] = priceData[k];
+    }
+  });
+
+  console.log("PRICE DATA STATE =", Object.keys(priceData).length);
+  console.log("FILTERED PRICE LENGTH =", Object.keys(res).length);
+
+  return res;
+}, [priceData, activeUnitView]);
+
+
+  console.log("ACTIVE UNIT =", activeUnitView);
+  console.log(
+    "FILTERED PRICE KEYS =",
+    Object.keys(filteredPriceData)
+  );
+
   const filteredRkbmdData = useMemo(
     () =>
       rkbmdData.filter(
@@ -655,12 +673,11 @@ const App = () => {
 
     const assetMap = {};
     Object.values(filteredPriceData || {}).forEach((item) => {
-      if (item.nama?.includes("TOYOTA") || item.nama?.includes("HONDA")) {
-        console.log("KENDARAAN", item);
+      if (safeString(item.nama).toLowerCase().includes("dummy")) {
+      console.log("MASUK KE ASSETMAP", item);
       }
 
-      const cleanNo = safeString(item.no_kartu).trim().toLowerCase();
-      const key = cleanNo || `price_${Math.random()}`;
+      const key = item.id;
 
       const { masa_manfaat } = parseKodeBarangData(
         item.no_kartu,
@@ -710,11 +727,9 @@ const App = () => {
             masa_manfaat,
           );
 
-      assetMap[key] = {
-          id: key,
+      assetMap[item.id] = {
           ...item,
-
-          id: item.id || key,
+          id: item.id,
 
           nilai_buku: liveNilaiBuku,
           tgl_habis: dynTglHabis,
@@ -814,6 +829,7 @@ const App = () => {
         }
       });
     });
+    
     const ruanganMobil = (filteredRuanganData || []).filter((r) =>
       (r.items || []).some(
         (it) =>
@@ -895,37 +911,58 @@ const App = () => {
       )
     );
 
-    return Object.values(assetMap)
-      .map((i) => {
-        const isManuallyDisposed = i.manual_disposal === true;
-        const isNaturallyExpired = i.isExpired || i.nilai_buku <= 0;
-        const active = isManuallyDisposed
-          ? false
-          : i.manual_active
-            ? true
-            : !isNaturallyExpired;
-        const _disposal = isManuallyDisposed
-          ? true
-          : !active && isNaturallyExpired;
-        return {
-          ...i,
-          _active: active,
-          _disposal,
-          isManuallyDisposed,
-          isNaturallyExpired,
-          alasan_hapus: i.alasan_hapus || "",
-        };
-      })
-      .filter((i) => {
-        if (monitoringSelectedYear !== "Semua") {
-          const thn = parseDateRobust(getSafeDateString(i.tgl_pengadaan))?.getFullYear()?.toString()
-            || safeString(i.tgl_pengadaan || i.tahun || "");
-          if (thn && !thn.includes(monitoringSelectedYear)) return false;
-        }
-        return true;
-      })
-      .sort((a, b) => a.diffDays - b.diffDays);
-  }, [
+    const result = Object.values(assetMap)
+  .map((i) => {
+    const isManuallyDisposed = i.manual_disposal === true;
+    const isNaturallyExpired = i.is_vehicle
+    ? false
+    : (i.isExpired || Number(i.nilai_buku || 0) <= 0);
+
+    const active = isManuallyDisposed
+      ? false
+      : i.manual_active
+        ? true
+        : !isNaturallyExpired;
+
+    const _disposal = isManuallyDisposed
+      ? true
+      : !active && isNaturallyExpired;
+
+      return {
+        ...i,
+        _active: active,
+        _disposal,
+        isManuallyDisposed,
+        isNaturallyExpired,
+        alasan_hapus: i.alasan_hapus || "",
+      };
+    })
+    .filter((i) => {
+      if (monitoringSelectedYear !== "Semua") {
+        const thn =
+          parseDateRobust(getSafeDateString(i.tgl_pengadaan))
+            ?.getFullYear()
+            ?.toString() ||
+          safeString(i.tgl_pengadaan || i.tahun || "");
+
+        if (thn && !thn.includes(monitoringSelectedYear)) return false;
+      }
+
+      return true;
+    })
+    .sort((a, b) => a.diffDays - b.diffDays);
+
+  console.log(
+    "MONITORING DUMMY",
+    result.filter((x) =>
+      safeString(x.nama).toLowerCase().includes("dummy")
+    )
+  );
+
+  return result;
+  }, 
+  
+  [
     filteredPriceData,
     priceData,
     filteredPegawaiData,
@@ -960,25 +997,56 @@ const disposalData = monitoringDataFiltered
       (acc, r) => acc + (r.items?.length || 0),
       0,
     );
+
   const vehicleItems = monitoringDataFiltered.filter((i) => {
-    // Jangan tampilkan kendaraan yang sudah masuk usulan penghapusan
+    console.log(
+    "MONITORING BEFORE FILTER",
+    monitoringDataFiltered.map(x => ({
+        nama: x.nama,
+        is_vehicle: x.is_vehicle,
+        disposal: x._disposal,
+        pajak: x.tgl_pajak
+    }))
+);
     if (i._disposal) return false;
+    if (i.is_vehicle) return true; // eksplisit ditambahkan lewat tombol Tambah Kendaraan
 
     const n = safeString(i.nama).toLowerCase();
-
     const isVehicle =
-      (n.includes("motor") ||
-        n.includes("mobil") ||
-        n.includes("kendaraan") ||
-        n.includes("truk") ||
-        n.includes("jeep") ||
-        n.includes("pick up")) &&
-      !n.includes("kursi roda") &&
-      !n.includes("roda dorong");
+      (n.includes("motor") || n.includes("mobil") || n.includes("kendaraan") ||
+      n.includes("truk") || n.includes("jeep") || n.includes("pick up")) &&
+      !n.includes("kursi roda") && !n.includes("roda dorong");
 
     return isVehicle || i.tgl_pajak;
   });
-  console.log("VEHICLE ITEMS", vehicleItems);
+
+  // Menentukan ID dokumen 'prices' yang BENAR untuk sebuah kendaraan.
+  // Sebagian kendaraan (yang ditambahkan lewat "Tambah Kendaraan") sudah punya
+  // dokumen 'prices' sendiri, sehingga item.id sudah valid.
+  // Namun kendaraan lama yang datanya masih menempel di dalam array items milik
+  // pegawai/ruangan TIDAK punya dokumen 'prices' sendiri — item.id untuk kasus ini
+  // hanyalah no_kartu yang di-lowercase (lihat monitoringDataFiltered di atas),
+  // BUKAN id dokumen Firestore asli. Jika ID palsu ini langsung dipakai untuk
+  // setDoc/getDoc/delete ke koleksi 'prices', operasi akan gagal total (dokumen
+  // tidak pernah ditemukan) atau malah membuat dokumen sampah baru.
+  const resolveVehicleDocId = (item) => {
+    if (item?.id && priceData[item.id]) return item.id;
+    const cleanNo = safeString(item?.no_kartu).trim().toLowerCase();
+    return cleanNo || item?.id || `KENDARAAN_${Date.now()}`;
+  };
+
+  console.log(
+    "VEHICLE ITEMS FULL",
+    vehicleItems.map(x => ({
+        nama: x.nama,
+        is_vehicle: x.is_vehicle,
+        disposal: x._disposal,
+        manual: x.manual_active,
+        pajak: x.tgl_pajak
+    }))
+);
+
+
   console.log(
     "DUMMY VEHICLE",
     vehicleItems.filter((x) =>
@@ -1137,9 +1205,14 @@ const disposalData = monitoringDataFiltered
 
         });
 
-        setPriceData(t);
+       setPriceData(t);
+
+        console.log("PRICE DATA LENGTH =", Object.keys(t).length);
+        console.log("PRICE DATA KEYS =", Object.keys(t));
       },
       );
+
+
   const unsubKB = onSnapshot(
       collection(db, "artifacts", appId, "public", "data", "kode_barang"),
       (s) => {
@@ -2699,7 +2772,10 @@ const disposalData = monitoringDataFiltered
     customConfirm(title, msg, "info", async () => {
       setStatus({ ...status, loading: true });
       try {
-        const safeId = item.id;
+        const safeId = resolveVehicleDocId(item);
+        if (!safeId) {
+          throw new Error("ID aset tidak ditemukan, tidak dapat memulihkan.");
+        }
         const payload = isManual
           ? { manual_disposal: false, manual_active: true, alasan_hapus: "", updatedAt: serverTimestamp() }
           : { manual_active: true, updatedAt: serverTimestamp() };
@@ -2709,7 +2785,10 @@ const disposalData = monitoringDataFiltered
           { merge: true },
         );
         customAlert("Berhasil", "Status aset berhasil diperbarui.");
-      } catch (e) {}
+      } catch (e) {
+        console.error("GAGAL RESTORE ITEM:", e.code, e.message);
+        customAlert("Gagal", `Terjadi kesalahan: ${e.message}`);
+      }
       setStatus({ ...status, loading: false });
     });
   };
@@ -2722,33 +2801,56 @@ const disposalData = monitoringDataFiltered
         setStatus({ ...status, loading: true });
 
         try {
-          const safeId = item.id;
+          const safeId = resolveVehicleDocId(item);
 
-        console.log("DELETE ID =", item.id);
-        console.log("DELETE NO_KARTU =", item.no_kartu);
+          if (!safeId) {
+            throw new Error(
+              "ID kendaraan tidak ditemukan, tidak dapat memindahkan ke Penghapusan."
+            );
+          }
+
+          const isPersisted = !!priceData[item.id] && item.id === safeId;
+
+          const disposalFlags = {
+            manual_disposal: true,
+            manual_active: false,
+            alasan_hapus: "Dihapus dari menu Pajak Kendaraan",
+            updatedAt: serverTimestamp(),
+          };
+
+          const payload = isPersisted
+            ? disposalFlags
+            : {
+                // Kendaraan ini belum punya dokumen 'prices' sendiri (datanya masih
+                // menempel di array items milik pegawai/ruangan). Promosikan dulu
+                // menjadi dokumen 'prices' tersendiri supaya proses Usulan
+                // Penghapusan & Hapus Permanen bisa berjalan dengan benar.
+                ...item,
+                lokasi:
+                  item.pemegang && item.pemegang !== "-"
+                    ? item.pemegang
+                    : item.ruangan && item.ruangan !== "-"
+                    ? item.ruangan
+                    : item.lokasi || "",
+                is_vehicle: true,
+                unitId: item.unitId || activeUnitView,
+                ...disposalFlags,
+              };
+          delete payload.id;
+          delete payload._disposal;
+          delete payload._active;
+          delete payload.isManuallyDisposed;
+          delete payload.isNaturallyExpired;
+          delete payload.diffDays;
+          delete payload.pemegang;
+          delete payload.ruangan;
+          delete payload.skpd;
 
           await setDoc(
             doc(db, "artifacts", appId, "public", "data", "prices", safeId),
-            {
-              manual_disposal: true,
-              manual_active: false,
-              alasan_hapus: "Dihapus dari menu Pajak Kendaraan",
-              updatedAt: serverTimestamp(),
-            },
+            payload,
             { merge: true }
           );
-
-          const snap = await getDoc(
-            doc(db, "artifacts", appId, "public", "data", "prices", safeId)
-          );
-
-          console.log("SETELAH DELETE =", snap.data());
-          if (snap.id === "w_1571_ap") {
-            console.log("SNAP DUMMY =", {
-              id: snap.id,
-              ...snap.data(),
-            });
-          }
 
           customAlert(
             "Berhasil",
@@ -2797,7 +2899,16 @@ const disposalData = monitoringDataFiltered
     setStatus({ ...status, loading: true });
     
     try {
-      const safeId = item.id;
+      const safeId = resolveVehicleDocId(item);
+
+      if (!safeId) {
+        setStatus({ ...status, loading: false });
+        return customAlert(
+          "Gagal",
+          "ID kendaraan tidak ditemukan, tidak dapat menghapus permanen."
+        );
+      }
+
       const targetRef = doc(db, "artifacts", appId, "public", "data", "prices", safeId);
       
       // Safety Net: Cek keberadaan dokumen sebelum melakukan delete & update batch
@@ -2880,7 +2991,11 @@ const disposalData = monitoringDataFiltered
         "Aset telah dihapus permanen dari sistem dan dari daftar ruangan/pegawai terkait.",
       );
     } catch (e) {
-      customAlert("Gagal", "Terjadi kesalahan saat menghapus permanen.");
+      console.error("GAGAL HAPUS PERMANEN:", e.code, e.message);
+      customAlert(
+        "Gagal",
+        `Terjadi kesalahan saat menghapus permanen: ${e.message}`
+      );
     }
     
     setStatus({ ...status, loading: false });
@@ -2990,6 +3105,9 @@ const disposalData = monitoringDataFiltered
       });
   };
     const handleVehicleHistory = (item) => {
+      console.log("ITEM KENDARAAN =", item);
+      console.log("HISTORY =", item.nomor_polisi_history);
+
       setVehicleHistoryModal({
           show: true,
           history: item.nomor_polisi_history || [],
@@ -3006,32 +3124,34 @@ const processSaveVehicle = async (vehicleData) => {
     try {
       const oldData = vehicleModal.item || null;
 
-      // Generasi ID Baru berdasarkan Plat Nomor yang diinput/diedit
       const documentId =
           oldData?.id ||
           `KENDARAAN_${Date.now()}`;
 
-      let nomorPolisiHistory = oldData?.nomor_polisi_history || [];
+      let nomorPolisiHistory = Array.isArray(oldData?.nomor_polisi_history)
+          ? [...oldData.nomor_polisi_history]
+          : [];
 
-      // Cek apakah plat nomor mengalami perubahan
-      if (
-        oldData &&
-        oldData.no_kartu &&
-        oldData.no_kartu !== vehicleData.no_kartu
-      ) {
-        nomorPolisiHistory = [
-          ...nomorPolisiHistory,
-          {
-            nomor: oldData.no_kartu,
-            berubah_ke: vehicleData.no_kartu,
+        const nomorLama = safeString(oldData?.no_kartu).trim();
+        const nomorBaru = safeString(vehicleData.no_kartu).trim();
+
+        if (
+          oldData &&
+          nomorLama &&
+          nomorBaru &&
+          nomorLama !== nomorBaru
+        ) {
+          nomorPolisiHistory.push({
+            dari: nomorLama,
+            ke: nomorBaru,
             tanggal: new Date().toISOString(),
-          },
-        ];
-      }
+          });
+        }
 
-      // Bersihkan & susun payload agar id tidak ikut tersimpan ke dalam field
       const payload = {
         ...vehicleData,
+        unitId: activeUnitView,
+        is_vehicle: true,
         nama: vehicleData.nama,
         no_kartu: vehicleData.no_kartu,
         nomor_mesin: vehicleData.nomor_mesin,
@@ -3043,31 +3163,36 @@ const processSaveVehicle = async (vehicleData) => {
         nomor_polisi_history: nomorPolisiHistory,
         updatedAt: serverTimestamp(),
       };
-      
+
       delete payload.id;
 
       console.log("EDIT MODE =", !!vehicleModal.item);
       console.log("DOCUMENT ID =", documentId);
-      console.log("OLD PLAT =", oldData?.no_kartu);
-      console.log("NEW PLAT =", vehicleData.no_kartu);
-      console.log("HISTORY =", nomorPolisiHistory);
+      console.log("PAYLOAD =", payload);
 
-      // 1. Simpan/Update dokumen ke ID Baru
-      await setDoc(
-      doc(
-          db,
-          "artifacts",
-          appId,
-          "public",
-          "data",
-          "prices",
-          documentId
-      ),
-        payload,
-        { merge: true }
+      const targetRef = doc(
+        db,
+        "artifacts",
+        appId,
+        "public",
+        "data",
+        "prices",
+        documentId
       );
 
-      // 2. Hapus dokumen lama HANYA jika sedang mode edit dan ID/plat nomor berubah
+      await setDoc(targetRef, payload, { merge: true });
+
+      // Verifikasi LANGSUNG ke server (bukan cache lokal) — supaya tidak ada lagi
+      // pop-up "Berhasil" palsu kalau ternyata ditolak Security Rules.
+      const verifySnap = await getDocFromServer(targetRef);
+      if (!verifySnap.exists()) {
+        throw new Error(
+          "Dokumen tidak ditemukan di server setelah disimpan. Kemungkinan ditolak oleh Firestore Security Rules."
+        );
+      }
+
+      console.log("VERIFIED DI SERVER =", verifySnap.data());
+
       customAlert(
         "Berhasil",
         vehicleModal.item
@@ -3081,11 +3206,20 @@ const processSaveVehicle = async (vehicleData) => {
       });
 
     } catch (e) {
-      console.error(e);
+      console.error("GAGAL SIMPAN KENDARAAN:", e.code, e.message);
+
+      const isNewVehicle = !vehicleModal.item;
+      const isPermissionDenied = e.code === "permission-denied";
+
+      const detail = isPermissionDenied
+        ? isNewVehicle
+          ? " Firestore Security Rules kemungkinan mengizinkan 'update' pada dokumen yang sudah ada tapi menolak 'create' dokumen baru di koleksi 'prices'. Mohon cek aturan 'allow create' untuk koleksi tersebut."
+          : " Periksa Firestore Security Rules untuk koleksi 'prices'."
+        : "";
 
       customAlert(
         "Error",
-        e.message
+        `Gagal menyimpan: ${e.message}.${detail}`
       );
 
     } finally {
@@ -3094,7 +3228,7 @@ const processSaveVehicle = async (vehicleData) => {
         loading: false,
       }));
     }
-  };
+};
   
   const processLinkAset = async (linkType, targetValue, updateMaster) => {
     const { item } = linkAsetModal;
@@ -4601,6 +4735,8 @@ const processSaveVehicle = async (vehicleData) => {
             </div>
           </div>
         </header>
+
+
         {activeTab === "dashboard" && (
           <DashboardView
             activeUnitView={activeUnitView}
@@ -4675,6 +4811,8 @@ const processSaveVehicle = async (vehicleData) => {
             templates={templates}
           />
         )}
+
+        
         {/* --- PAJAK KENDARAAN --- */}
         {activeTab === "pajak" && (
           <PajakView

@@ -21,6 +21,8 @@ const ModalVehicle = ({
     });
 
     useEffect(() => {
+        if (!show) return;
+
         if (initialData) {
             setForm({
                 id: initialData.id || "",
@@ -36,14 +38,35 @@ const ModalVehicle = ({
                     ? initialData.tgl_pajak_5_tahun.substring(0,10)
                     : ""
             });
+        } else {
+            // Mode Tambah Kendaraan: selalu mulai dari form kosong,
+            // jangan bawa data sisa dari sesi Edit sebelumnya.
+            setForm({
+                id: "",
+                nama: "",
+                no_kartu: "",
+                nomor_mesin: "",
+                nomor_rangka: "",
+                lokasi: "",
+                tgl_pajak: "",
+                tgl_pajak_5_tahun: ""
+            });
         }
-    }, [initialData]);
+    }, [initialData, show]);
 
     const update = (key,val)=>{
         setForm(prev=>({
             ...prev,
             [key]:val
         }));
+    };
+
+    const handleSave = () => {
+        if (!form.nama.trim() || !form.no_kartu.trim()) {
+            alert("Nama Kendaraan dan Nomor Polisi wajib diisi.");
+            return;
+        }
+        onSave(form);
     };
 
     if(!show) return null;
@@ -130,7 +153,7 @@ const ModalVehicle = ({
 
                     <button
                         disabled={statusLoading}
-                        onClick={()=>onSave(form)}
+                        onClick={handleSave}
                         className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-bold flex justify-center items-center gap-2"
                     >
                         {statusLoading

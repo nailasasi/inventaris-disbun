@@ -1,5 +1,5 @@
 import React from "react";
-import { History, X } from "lucide-react";
+import { History, X, ArrowDown } from "lucide-react";
 
 const ModalVehicleHistory = ({
     show,
@@ -44,27 +44,37 @@ const ModalVehicleHistory = ({
 
                             <div
                                 key={index}
-                                className="border rounded-xl p-4"
+                                className="border rounded-xl p-4 bg-slate-50 dark:bg-slate-700"
                             >
-
-                                <div className="text-xs text-slate-400 mb-2">
-                                    {new Date(item.tanggal).toLocaleString("id-ID")}
+                                <div className="text-xs text-slate-400 mb-3">
+                                    {new Date(item.tanggal).toLocaleString("id-ID", {
+                                        day: "2-digit",
+                                        month: "long",
+                                        year: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                    })}{" "}
+                                    WIB
                                 </div>
+                                <div className="flex flex-col items-center gap-2">
 
-                                <div className="font-bold">
-                                    {item.nomor}
+                                    <div className="px-3 py-1 rounded-lg bg-red-100 text-red-700 font-bold">
+                                        {item.dari}
+                                    </div>
+
+                                    <div className="flex justify-center my-2">
+                                        <ArrowDown
+                                            size={18}
+                                            className="text-slate-400"
+                                        />
+                                    </div>
+
+                                    <div className="px-3 py-1 rounded-lg bg-emerald-100 text-emerald-700 font-bold">
+                                        {item.ke}
+                                    </div>
+
                                 </div>
-
-                                <div className="text-center text-slate-400 my-2">
-                                    ↓
-                                </div>
-
-                                <div className="font-bold text-emerald-600">
-                                    {item.berubah_ke}
-                                </div>
-
                             </div>
-
                         ))}
 
                     </div>

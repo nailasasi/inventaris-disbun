@@ -206,10 +206,31 @@ const PajakView = ({
                     }
                   >
                     <td className="py-4 px-4 whitespace-nowrap">
-                      <p className="font-bold text-sm">{safeString(it.nama)}</p>
-                      <p className="text-xs text-slate-400 font-mono">
-                        {safeString(it.no_kartu)}
+                      <p className="font-bold text-sm">
+                        {safeString(it.nama)}
                       </p>
+
+                      {(() => {
+                        const history = Array.isArray(it.nomor_polisi_history)
+                          ? it.nomor_polisi_history
+                          : [];
+
+                        if (history.length > 0) {
+                          const last = history[history.length - 1];
+
+                          return (
+                            <p className="text-xs text-blue-500 font-mono">
+                              {safeString(last.dari)} ➜ {safeString(last.ke)}
+                            </p>
+                          );
+                        }
+
+                        return (
+                          <p className="text-xs text-slate-400 font-mono">
+                            {safeString(it.no_kartu)}
+                          </p>
+                        );
+                      })()}
                     </td>
                     <td className="py-4 px-4 whitespace-nowrap text-sm font-bold text-slate-500">
                       <div className="flex items-center gap-2">
