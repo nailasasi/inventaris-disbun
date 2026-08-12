@@ -48,20 +48,9 @@ const DataAsetView = ({ confirmDelete, data, handleExportBulkLabel, handleExport
                                        <td className="py-4 text-xs md:text-sm font-mono text-slate-500">{safeString(mergedItem.no_kartu)}</td>
                                        <td className="py-4 text-center flex justify-center gap-1 md:gap-2">
                                            <button
-                                             onClick={() => {
-                                                console.log("BUTTON LABEL DIKLIK");
-
-                                                exportLabelExcel(
-                                                      templates.label.url,
-                                                      [mergedItem],
-                                                      selectedUser.nama,
-                                                      priceData,
-                                                      data,
-                                                      safeString
-                                                );
-                                             }}
+                                             onClick={() => handleExportBulkLabel([mergedItem], selectedUser.nama)}
                                              className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 rounded-lg transition-colors"
-                                             title="Cetak Label (Excel)"
+                                             title="Cetak Label"
                                           >
                                              <QrCode size={14} />
                                           </button>

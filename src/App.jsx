@@ -644,27 +644,40 @@ const App = () => {
   const handleExportBulkLabel = async (
     items,
     defaultLocation = "Kumpulan Aset",
-  ) => {
-    if (!templates.label?.url) {
-      customAlert("Template belum ada", "Silakan upload template label.");
+    filterType = "semua",
+    selectedValue = ""
+) => {
 
-      return;
+    if (!templates.label?.url) {
+        customAlert(
+            "Template belum ada",
+            "Silakan upload template label."
+        );
+        return;
+    }
+
+    let fileName = "Laporan & Ekspor_Semua Label";
+
+    if (filterType === "orang" && selectedValue) {
+        fileName =
+            `Laporan & Ekspor_${selectedValue}`;
+    }
+
+    if (filterType === "barang" && selectedValue) {
+        fileName =
+            `Laporan & Ekspor_${selectedValue}`;
     }
 
     await exportLabelExcel(
-      templates.label.url,
-
-      items,
-
-      defaultLocation,
-
-      priceData,
-
-      data,
-
-      safeString,
+        templates.label.url,
+        items,
+        defaultLocation,
+        priceData,
+        data,
+        safeString,
+        fileName
     );
-  };
+};
   const monitoringDataFiltered = useMemo(() => {
     console.log("MASUK monitoringDataFiltered");
 
