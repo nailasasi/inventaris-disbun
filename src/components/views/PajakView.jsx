@@ -10,6 +10,7 @@ import {
   Check,
   Trash2,
   History,
+  Search,
 } from "lucide-react";
 import React, { useState } from "react";
 import {
@@ -39,12 +40,76 @@ const PajakView = ({
   // State untuk melacak status copy per-item
   const [copiedField, setCopiedField] = useState(null);
 
+  // State untuk pencarian & filter
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("Semua");
+  const [pemegangFilter, setPemegangFilter] = useState("Semua");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
   const handleCopy = (text, key) => {
     if (!text || text === "-") return;
     navigator.clipboard.writeText(text);
     setCopiedField(key);
     setTimeout(() => setCopiedField(null), 1500);
   };
+
+  // Helper: nama pemegang aktif (pegawai / ruangan / lokasi)
+  const getPemegangName = (it) =>
+    it.pemegang !== "-"
+      ? safeString(it.pemegang)
+      : it.ruangan !== "-"
+        ? safeString(it.ruangan)
+        : safeString(it.lokasi || "N/A");
+
+  // Helper: kategori status masa berlaku pajak, dipakai untuk filter
+  const getVehicleStatusCategory = (it) => {
+    const tglMasa = parseDateRobust(
+      getSafeDateString(it.tgl_pajak) || getSafeDateString(it.tgl_pengadaan),
+    );
+    if (!tglMasa) return "Aman";
+    const diffDays = Math.ceil((tglMasa - new Date()) / 86400000);
+    if (diffDays < 0) return "Lewat Waktu";
+    if (diffDays <= 30) return "Akan Habis";
+    return "Aman";
+  };
+
+  // Opsi dropdown Pemegang, diambil dinamis dari data kendaraan yang ada
+  const pemegangOptions = [
+    "Semua",
+    ...Array.from(
+      new Set(vehicleItems.map(getPemegangName).filter((v) => v && v !== "N/A")),
+    ).sort(),
+  ];
+
+  // Saran (autocomplete) saat mengetik di kolom pencarian
+  const suggestionMatches = searchQuery.trim()
+    ? vehicleItems
+        .filter((it) =>
+          [it.nama, it.no_kartu].some((v) =>
+            safeString(v).toLowerCase().includes(searchQuery.trim().toLowerCase()),
+          ),
+        )
+        .slice(0, 6)
+    : [];
+
+  // Data kendaraan setelah difilter pencarian + status + pemegang
+  const filteredVehicleItems = vehicleItems.filter((it) => {
+    const q = searchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      [
+        it.nama,
+        it.no_kartu,
+        getPemegangName(it),
+        it.nomor_mesin || it.no_mesin,
+        it.nomor_rangka || it.no_rangka,
+      ].some((v) => safeString(v).toLowerCase().includes(q));
+    const matchesPemegang =
+      pemegangFilter === "Semua" || getPemegangName(it) === pemegangFilter;
+    const matchesStatus =
+      statusFilter === "Semua" || getVehicleStatusCategory(it) === statusFilter;
+    return matchesSearch && matchesPemegang && matchesStatus;
+  });
 
   return (
     <div
@@ -116,36 +181,114 @@ const PajakView = ({
           </button>
         </div>
       </div>
-      <div className="p-4 md:p-8 overflow-x-auto">
+
+      {/* SEARCH & FILTER BAR */}
+      <div className={`px-4 md:px-8 py-6 border-b ${isDarkMode ? "border-slate-700" : "border-slate-100"}`}>
+        <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
+          <div className="relative flex-grow">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setShowSuggestions(true);
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+              placeholder="Cari kendaraan, nomor polisi, pemegang, atau nomor mesin..."
+              className={`w-full pl-9 pr-3 py-3 rounded-xl border outline-none text-sm font-semibold focus:border-emerald-500 ${isDarkMode ? "bg-slate-900 border-slate-700 text-white placeholder:text-slate-500" : "bg-slate-50 border-slate-200 placeholder:text-slate-400"}`}
+            />
+            {showSuggestions && searchQuery.trim() && suggestionMatches.length > 0 && (
+              <div
+                className={`absolute z-20 mt-1 w-full max-h-60 overflow-y-auto rounded-xl border shadow-xl ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}
+              >
+                {suggestionMatches.map((it, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onMouseDown={() => {
+                      setSearchQuery(safeString(it.no_kartu || it.nama));
+                      setShowSuggestions(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 text-sm flex flex-col ${isDarkMode ? "hover:bg-slate-700" : "hover:bg-emerald-50"}`}
+                  >
+                    <span className="font-bold">{safeString(it.nama)}</span>
+                    <span
+                      className={`inline-block w-fit mt-0.5 px-2 py-0.5 rounded-md text-[10px] font-mono ${isDarkMode ? "bg-slate-700 text-slate-300" : "bg-slate-100 text-slate-500"}`}
+                    >
+                      {safeString(it.no_kartu)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className={`p-3 rounded-xl border outline-none text-sm font-bold min-w-[150px] shrink-0 ${isDarkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-slate-50 border-slate-200"}`}
+          >
+            <option value="Semua">Status: Semua</option>
+            <option value="Aman">Aman</option>
+            <option value="Akan Habis">Akan Habis</option>
+            <option value="Lewat Waktu">Lewat Waktu</option>
+          </select>
+
+          <select
+            value={pemegangFilter}
+            onChange={(e) => setPemegangFilter(e.target.value)}
+            className={`p-3 rounded-xl border outline-none text-sm font-bold min-w-[170px] max-w-[240px] shrink-0 ${isDarkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-slate-50 border-slate-200"}`}
+          >
+            {pemegangOptions.map((p) => (
+              <option key={p} value={p}>
+                {p === "Semua" ? "Pemegang: Semua" : p}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => setShowSuggestions(false)}
+            className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors shrink-0"
+          >
+            <Search size={16} /> Cari
+          </button>
+        </div>
+      </div>
+
+      <div className="px-4 md:px-8 pb-4 md:pb-8 overflow-auto max-h-[70vh]">
         <table className="w-full text-left min-w-[1300px]">
           <thead>
-            <tr
-              className={`text-xs font-black text-slate-400 border-b ${isDarkMode ? "border-slate-700" : ""}`}
-            >
-              <th className="pb-4 px-4 whitespace-nowrap">Kendaraan</th>
-              <th className="pb-4 px-4 whitespace-nowrap">Pemegang</th>
-              <th className="pb-4 px-4 whitespace-nowrap w-40">Nomor Mesin</th>
-              <th className="pb-4 px-4 whitespace-nowrap w-52">Nomor Rangka</th>
-              
-              <th className="pb-4 px-4 whitespace-nowrap">
+            <tr className="text-xs font-black text-slate-400">
+              <th className={`sticky top-0 z-10 pt-4 pb-4 px-4 whitespace-nowrap border-b ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>Kendaraan</th>
+              <th className={`sticky top-0 z-10 pt-4 pb-4 px-4 whitespace-nowrap border-b ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>Pemegang</th>
+              <th className={`sticky top-0 z-10 pt-4 pb-4 px-4 whitespace-nowrap border-b w-40 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>Nomor Mesin</th>
+              <th className={`sticky top-0 z-10 pt-4 pb-4 px-4 whitespace-nowrap border-b w-52 ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>Nomor Rangka</th>
+
+              <th className={`sticky top-0 z-10 pt-4 pb-4 px-4 whitespace-nowrap border-b ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>
                 Tgl Pajak (Masa Berlaku)
               </th>
-              <th className="pb-4 px-4 whitespace-nowrap">
+              <th className={`sticky top-0 z-10 pt-4 pb-4 px-4 whitespace-nowrap border-b ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>
                 Tgl Pajak 5 Tahun
               </th>
-              <th className="pb-4 px-4 text-center whitespace-nowrap">
+              <th className={`sticky top-0 z-10 pt-4 pb-4 px-4 text-center whitespace-nowrap border-b ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>
                 Pajak 5 Tahunan
               </th>
-              <th className="pb-4 px-4 text-center whitespace-nowrap">
+              <th className={`sticky top-0 z-10 pt-4 pb-4 px-4 text-center whitespace-nowrap border-b ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>
                 Status
               </th>
-              <th className="pb-4 px-4 text-center whitespace-nowrap">
+              <th className={`sticky top-0 z-10 pt-4 pb-4 px-4 text-center whitespace-nowrap border-b ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>
                 Foto Kendaraan
               </th>
-              <th className="pb-4 px-4 text-center whitespace-nowrap">
+              <th className={`sticky top-0 z-10 pt-4 pb-4 px-4 text-center whitespace-nowrap border-b ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>
                 Bukti Bayar {pajakSelectedYear}
               </th>
-              <th className="pb-4 px-4 text-center whitespace-nowrap">
+              <th className={`sticky top-0 z-10 pt-4 pb-4 px-4 text-center whitespace-nowrap border-b ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-100"}`}>
                 Aksi
               </th>
             </tr>
@@ -153,14 +296,16 @@ const PajakView = ({
 
             
           <tbody className={`divide-y ${isDarkMode ? "divide-slate-700" : ""}`}>
-          {vehicleItems.length === 0 ? (
+          {filteredVehicleItems.length === 0 ? (
               <tr>
                   <td colSpan="11" className="text-center py-10 text-slate-400 font-bold">
-                      Tidak ada data kendaraan terdeteksi.
+                      {vehicleItems.length === 0
+                        ? "Tidak ada data kendaraan terdeteksi."
+                        : "Tidak ada kendaraan yang cocok dengan pencarian/filter."}
                   </td>
               </tr>
           ) : (
-              vehicleItems.map((it, i) => {
+              filteredVehicleItems.map((it, i) => {
 
                   const tglMasa = parseDateRobust(
                   getSafeDateString(it.tgl_pajak) ||
@@ -232,9 +377,9 @@ const PajakView = ({
                         );
                       })()}
                     </td>
-                    <td className="py-4 px-4 whitespace-nowrap text-sm font-bold text-slate-500">
-                      <div className="flex items-center gap-2">
-                        <span className="leading-snug">
+                    <td className="py-4 px-4 text-sm font-bold text-slate-500">
+                      <div className="flex items-center gap-2 max-w-[220px]">
+                        <span className="leading-snug break-words">
                           {it.pemegang !== "-"
                             ? safeString(it.pemegang)
                             : it.ruangan !== "-"
@@ -365,9 +510,14 @@ const PajakView = ({
                               fileName: "",
                             })
                           }
-                          className="text-[10px] md:text-xs text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-2 rounded py-1"
+                          className="inline-block rounded-lg overflow-hidden border border-slate-200 dark:border-slate-600 hover:opacity-80 hover:ring-2 hover:ring-emerald-400 transition-all"
+                          title="Lihat Foto Kendaraan"
                         >
-                          Lihat Foto
+                          <img
+                            src={safeString(it.photoBase64)}
+                            alt={safeString(it.nama)}
+                            className="w-12 h-12 object-cover"
+                          />
                         </button>
                       ) : !isReadOnly ? (
                         <button

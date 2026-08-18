@@ -445,6 +445,34 @@ const App = () => {
       onConfirm,
     });
 
+  // Helper: cari data Kasubag & Pengurus Barang dari daftar pegawai.
+  // Dipakai sebagai "Pihak Pertama" & "Pihak Kedua" pada BAST mutasi antar ruangan
+  // (karena ruangan bukan orang, jadi diwakilkan). Pola pencarian sama dengan
+  // yang sudah dipakai di fitur cetak KIR, supaya konsisten.
+  const getKasubagPengurusBarang = () => {
+    const kasubag = (filteredPegawaiData || []).find(
+      (p) =>
+        p.nama && safeString(p.nama).toLowerCase().includes("indira dwigus"),
+    ) || {
+      nama: "INDIRA DWIGUS KIRANA",
+      nip: "............................",
+      jabatan: "Kepala Sub Bagian Umum dan Kepegawaian",
+    };
+    const pengurus = (filteredPegawaiData || []).find(
+      (p) =>
+        p.nama && safeString(p.nama).toLowerCase().includes("sugeng riyanto"),
+    ) || {
+      nama: "SUGENG RIYANTO",
+      nip: "............................",
+      jabatan: "Pengurus Barang",
+    };
+    // Pastikan field jabatan selalu terisi untuk BAST, walau data pegawai asli
+    // tidak punya field jabatan yang cocok.
+    if (!kasubag.jabatan) kasubag.jabatan = "Kepala Sub Bagian Umum dan Kepegawaian";
+    if (!pengurus.jabatan) pengurus.jabatan = "Pengurus Barang";
+    return { kasubag, pengurus };
+  };
+
   const generateBAST = async (item, sender, receiver) => {
     try {
       if (!templates.bast_barang?.url) {
@@ -2498,6 +2526,7 @@ const disposalData = monitoringDataFiltered
     }
     setStatus({ ...status, loading: false });
   };
+  
   const processTransferUnit = async (targetUnit, targetBidang) => {
     const { item, sourceType, sourceRef } = transferUnitModal;
     if (!targetUnit || !user || !item) return;
@@ -3048,37 +3077,121 @@ const disposalData = monitoringDataFiltered
     if (!item || !user) return;
     setStatus({ ...status, loading: true });
     try {
-      const safeId = item.no_kartu
-        ? safeString(item.no_kartu)
-            .trim()
-            .replace(/[^a-zA-Z0-9.-]/g, "_")
-        : safeString(item.nama)
-            .toUpperCase()
-            .replace(/[^a-zA-Z0-9]/g, "_")
-            .substring(0, 100);
+      // PENTING: pakai helper resolveVehicleDocId (sudah ada di file ini)
+      // supaya ID dokumen yang dipakai konsisten dengan fungsi kendaraan
+      // lain (handleDeleteVehicle, handlePerpanjangPajak, dll). JANGAN
+      // hitung ulang ID manual dari no_kartu di sini.
+      const safeId = resolveVehicleDocId(item);
       let locName = targetIdParam;
       const isPegawai = (data || []).find((p) => p.nip === targetIdParam);
       if (isPegawai) locName = isPegawai.nama;
-      // Pemegang baru
+      // Pemegang baru (wajib pegawai terdaftar)
       const receiver = isPegawai;
+      if (!receiver) {
+        customAlert("Gagal", "Pegawai tujuan tidak ditemukan.");
+        setStatus({ ...status, loading: false });
+        return;
+      }
 
-      // Pemegang lama
-      const sender = (data || []).find(
-        (p) => p.nama === item.lokasi || p.nama === item.pemegang,
+      // Pemegang lama — kalau bukan pegawai terdaftar (mis. label umum
+      // seperti "Sekretariat"/"Aset"), tetap dianggap valid sebagai sender
+      // pakai nama apa adanya, supaya BAST tetap bisa dibuat.
+      const oldOwnerName = safeString(
+        item.pemegang && item.pemegang !== "-"
+          ? item.pemegang
+          : item.ruangan && item.ruangan !== "-"
+            ? item.ruangan
+            : item.lokasi,
       );
-      await setDoc(
+      const senderPegawai = (data || []).find((p) => p.nama === oldOwnerName);
+      const sender = senderPegawai || { nama: oldOwnerName, jabatan: "-" };
+
+      // PENTING: tabel pemegang di layar dihitung ulang dari array `items`
+      // milik masing-masing pegawai di collection "pegawai" (bukan cuma dari
+      // field pemegang/lokasi di collection "prices"). Jadi kalau kendaraan
+      // ini masih nyangkut di daftar `items` pegawai lama, dia akan menimpa
+      // balik nama pemegang baru. Makanya di sini kita sinkronkan juga
+      // array `items` pegawai lama (hapus) & pegawai baru (tambah).
+      const safeVehicleItem = {
+        nama: safeString(item.nama),
+        merk: safeString(item.merk || "-"),
+        tahun: safeString(item.tahun || item.tgl_pengadaan || ""),
+        no_kartu: safeString(item.no_kartu),
+        isLocalOnly: item.isLocalOnly || false,
+      };
+
+      const b = writeBatch(db);
+
+      if (senderPegawai && Array.isArray(senderPegawai.items)) {
+        const newSenderItems = senderPegawai.items.filter(
+          (x) =>
+            !(
+              safeString(x.no_kartu) === safeVehicleItem.no_kartu &&
+              safeString(x.nama) === safeVehicleItem.nama
+            ),
+        );
+        b.update(
+          doc(
+            db,
+            "artifacts",
+            appId,
+            "public",
+            "data",
+            "pegawai",
+            safeString(senderPegawai.nip).replace(/\s/g, ""),
+          ),
+          { items: newSenderItems },
+        );
+      }
+
+      b.update(
+        doc(
+          db,
+          "artifacts",
+          appId,
+          "public",
+          "data",
+          "pegawai",
+          safeString(receiver.nip).replace(/\s/g, ""),
+        ),
+        { items: arrayUnion(safeVehicleItem) },
+      );
+
+      b.set(
         doc(db, "artifacts", appId, "public", "data", "prices", safeId),
-        { lokasi: locName, updatedAt: serverTimestamp() },
+        {
+          pemegang: locName,
+          ruangan: "-",
+          lokasi: locName,
+          updatedAt: serverTimestamp(),
+        },
         { merge: true },
       );
-      if (sender && receiver) {
-        console.log("Mau generate BAST");
-        console.log(sender);
-        console.log(receiver);
-        await generateBASTKendaraan(item, sender, receiver);
-      }
+
+      b.set(
+        doc(collection(db, "artifacts", appId, "public", "data", "histori")),
+        {
+          unitId: activeUnitView,
+          itemName: safeString(item.nama),
+          senderName: safeString(sender.nama),
+          receiverName: safeString(receiver.nama),
+          type: "MUTASI KENDARAAN",
+          timestamp: serverTimestamp(),
+          no_kartu: item.no_kartu,
+        },
+      );
+
+      await b.commit();
+
       customAlert("Berhasil", "Pemegang kendaraan telah diperbarui.");
       setEditPajakModal({ show: false, item: null });
+
+      try {
+        await generateBASTKendaraan(item, sender, receiver);
+      } catch (e) {
+        console.error("generateBASTKendaraan ERROR:", e);
+        customAlert("Error", e.message);
+      }
     } catch (e) {
       console.error("processPajakOwner ERROR:", e);
       customAlert("Error", e.message);
@@ -3161,6 +3274,19 @@ const processSaveVehicle = async (vehicleData) => {
           });
         }
 
+      let photoURL = oldData?.photoBase64 || "";
+      if (vehicleData.photoFile) {
+        try {
+          photoURL = await uploadToCloudinary(vehicleData.photoFile);
+        } catch (photoErr) {
+          console.error("GAGAL UPLOAD FOTO KENDARAAN:", photoErr);
+          customAlert(
+            "Foto Gagal Diupload",
+            `Data kendaraan tetap disimpan, tapi foto gagal diunggah: ${photoErr.message}`
+          );
+        }
+      }
+
       const payload = {
         ...vehicleData,
         unitId: activeUnitView,
@@ -3169,15 +3295,21 @@ const processSaveVehicle = async (vehicleData) => {
         no_kartu: vehicleData.no_kartu,
         nomor_mesin: vehicleData.nomor_mesin,
         nomor_rangka: vehicleData.nomor_rangka,
-        lokasi: vehicleData.lokasi,
-        pemegang: vehicleData.lokasi,
+        // Pemegang / mutasi kendaraan HANYA lewat kolom "Pemegang" (ikon pensil).
+        // Form Edit Kendaraan (Aksi) tidak boleh mengubah pemegang, jadi nilai
+        // lama dipertahankan apa pun isi field lokasi di form ini.
+        lokasi: oldData?.lokasi ?? vehicleData.lokasi,
+        pemegang: oldData?.pemegang ?? vehicleData.lokasi,
+        ruangan: oldData?.ruangan ?? "-",
         tgl_pajak: vehicleData.tgl_pajak || "",
         tgl_pajak_5_tahun: vehicleData.tgl_pajak_5_tahun || "",
         nomor_polisi_history: nomorPolisiHistory,
+        photoBase64: photoURL,
         updatedAt: serverTimestamp(),
       };
 
       delete payload.id;
+      delete payload.photoFile;
 
       console.log("EDIT MODE =", !!vehicleModal.item);
       console.log("DOCUMENT ID =", documentId);
@@ -3258,11 +3390,16 @@ const processSaveVehicle = async (vehicleData) => {
         const targetPegawai = (data || []).find((p) => p.nip === targetValue);
         if (targetPegawai) locName = targetPegawai.nama;
       }
-      await setDoc(
+
+      const b = writeBatch(db);
+
+      // 1) Update lokasi di Master Data (dipakai tampilan Monitoring Aset)
+      b.set(
         doc(db, "artifacts", appId, "public", "data", "prices", safeId),
         { lokasi: locName, updatedAt: serverTimestamp() },
         { merge: true },
       );
+
       if (updateMaster && linkType !== "manual") {
         const itemToSave = {
           nama: safeString(item.nama),
@@ -3274,8 +3411,50 @@ const processSaveVehicle = async (vehicleData) => {
           ),
           no_kartu: safeString(item.no_kartu || ""),
         };
+
+        const matchItem = (x) =>
+          safeString(x.no_kartu) === safeString(itemToSave.no_kartu) &&
+          safeString(x.nama) === safeString(itemToSave.nama);
+
+        // 2) Hapus item ini dari SEMUA ruangan lain yang masih menyimpannya
+        //    (kecuali ruangan tujuan, yang akan ditambahkan di langkah 4)
+        (filteredRuanganData || []).forEach((r) => {
+          if (!r.id) return;
+          if (linkType === "ruangan" && r.nama_ruangan === targetValue) return;
+          const items = r.items || [];
+          if (items.some(matchItem)) {
+            b.update(
+              doc(db, "artifacts", appId, "public", "data", "ruangan", r.id),
+              { items: items.filter((x) => !matchItem(x)) },
+            );
+          }
+        });
+
+        // 3) Hapus item ini dari SEMUA pegawai lain yang masih menyimpannya
+        //    (kecuali pegawai tujuan)
+        (data || []).forEach((p) => {
+          if (!p.nip) return;
+          if (linkType === "pegawai" && p.nip === targetValue) return;
+          const items = p.items || [];
+          if (items.some(matchItem)) {
+            b.update(
+              doc(
+                db,
+                "artifacts",
+                appId,
+                "public",
+                "data",
+                "pegawai",
+                safeString(p.nip).replace(/\s/g, ""),
+              ),
+              { items: items.filter((x) => !matchItem(x)) },
+            );
+          }
+        });
+
+        // 4) Tambahkan item ke lokasi tujuan
         if (linkType === "pegawai") {
-          await updateDoc(
+          b.set(
             doc(
               db,
               "artifacts",
@@ -3286,6 +3465,7 @@ const processSaveVehicle = async (vehicleData) => {
               targetValue.replace(/\s/g, ""),
             ),
             { items: arrayUnion(itemToSave) },
+            { merge: true },
           );
         } else if (linkType === "ruangan") {
           const roomDoc = filteredRuanganData.find(
@@ -3295,7 +3475,7 @@ const processSaveVehicle = async (vehicleData) => {
             roomDoc && roomDoc.id
               ? roomDoc.id
               : `${activeUnitView}_${targetValue.replace(/[^a-zA-Z0-9]/g, "_")}`;
-          await setDoc(
+          b.set(
             doc(db, "artifacts", appId, "public", "data", "ruangan", roomDocId),
             {
               unitId: activeUnitView,
@@ -3306,12 +3486,27 @@ const processSaveVehicle = async (vehicleData) => {
             { merge: true },
           );
         }
+
+        await b.commit();
+
+        // Mutasi ke ruangan -> otomatis buat & unduh BAST sebagai bukti pemindahan.
+        // Pihak Pertama = Kasubag, Pihak Kedua = Pengurus Barang (ruangan tidak
+        // punya identitas sendiri, jadi diwakilkan oleh 2 pihak ini).
+        if (linkType === "ruangan") {
+          const { kasubag, pengurus } = getKasubagPengurusBarang();
+          await generateBAST(itemToSave, kasubag, pengurus);
+        }
+
         customAlert("Berhasil", "Data dihubungkan & disimpan ke Master Data.");
       } else {
+        await b.commit();
         customAlert("Berhasil", "Lokasi diupdate.");
       }
       setLinkAsetModal({ show: false, item: null });
-    } catch (e) {}
+    } catch (e) {
+      console.error(e);
+      customAlert("Gagal", "Terjadi kesalahan saat memindahkan aset.");
+    }
     setStatus({ ...status, loading: false });
   };
   const processEditNilai = async (
@@ -3382,6 +3577,13 @@ const processSaveVehicle = async (vehicleData) => {
   };
   const CLOUDINARY_CLOUD_NAME = "gctf50zw"; // ganti dengan Cloud Name kamu
   const CLOUDINARY_UPLOAD_PRESET = "preset_inventaris"; // ganti dengan Unsigned Upload Preset kamu
+  // Password tambahan khusus untuk mengunci form "Edit Kendaraan".
+  // CATATAN KEAMANAN: ini cuma gerbang di sisi tampilan (UI), bukan
+  // pengganti Firestore Security Rules — pengguna yang paham DevTools
+  // masih bisa melewatinya. Untuk keamanan sungguhan, terapkan juga
+  // aturan di Firestore Security Rules sisi server. Ganti nilai di
+  // bawah ini dengan password rahasia milikmu sendiri.
+  const VEHICLE_EDIT_PASSWORD = "invensbun2026";
 
   const uploadToCloudinary = async (file) => {
     const isImage = file.type.startsWith("image/");
@@ -4287,17 +4489,42 @@ const processSaveVehicle = async (vehicleData) => {
       const tglMasa = parseDateRobust(
         getSafeDateString(it.tgl_pajak) || getSafeDateString(it.tgl_pengadaan),
       );
+      const tglPajak5 = parseDateRobust(
+        getSafeDateString(it.tgl_pajak_5_tahun),
+      );
+
       let diffDays = 0,
         status = "AMAN";
       if (tglMasa) {
         diffDays = Math.ceil((tglMasa - new Date()) / 86400000);
         if (diffDays < 0) status = "LEWAT WAKTU";
-        else if (diffDays <= 30) status = `H-${diffDays} (WARNING)`;
+        else if (diffDays <= 30) status = `H-${diffDays}`;
       }
+
+      let pajak5Tahunan = false;
+      if (tglPajak5) {
+        const diffPajak5 = Math.ceil((tglPajak5 - new Date()) / 86400000);
+        pajak5Tahunan = diffPajak5 >= 0 && diffPajak5 <= 30;
+      }
+
+      const noMesin = safeString(it.nomor_mesin || it.no_mesin || "-");
+      const noRangka = safeString(it.nomor_rangka || it.no_rangka || "-");
+
+      const history = Array.isArray(it.nomor_polisi_history)
+        ? it.nomor_polisi_history
+        : [];
+      const riwayatPlat =
+        history.length > 0
+          ? `${safeString(history[history.length - 1].dari)} -> ${safeString(history[history.length - 1].ke)}`
+          : "-";
+
       return {
         No: i + 1,
         "Nama Kendaraan": safeString(it.nama),
         "Nomor Polisi": safeString(it.no_kartu),
+        "Riwayat Ganti No Polisi": riwayatPlat,
+        "Nomor Mesin": noMesin,
+        "Nomor Rangka": noRangka,
         "Pemegang / Lokasi":
           it.pemegang !== "-"
             ? safeString(it.pemegang)
@@ -4307,16 +4534,50 @@ const processSaveVehicle = async (vehicleData) => {
         "Tgl Pajak (Masa Berlaku)": tglMasa
           ? tglMasa.toLocaleDateString("id-ID")
           : "-",
+        "Tgl Pajak 5 Tahun": tglPajak5
+          ? tglPajak5.toLocaleDateString("id-ID")
+          : "-",
+        "Pajak 5 Tahunan": pajak5Tahunan ? "IYA" : "TIDAK",
         Status: status,
-        "Ada Foto Kendaraan": it.photoBase64 ? "Ya" : "Tidak",
-        "Ada Bukti Bayar (Tahun Dipilih)": it[
+        "Foto Kendaraan": it.photoBase64 ? "Lihat Foto" : "-",
+        "Bukti Bayar (Tahun Dipilih)": it[
           `pajak_history.${pajakSelectedYear}`
         ]
-          ? "Ya"
-          : "Tidak",
+          ? "Lihat Bukti"
+          : "-",
       };
     });
     const ws = window.XLSX.utils.json_to_sheet(rows);
+
+    // Ubah kolom "Foto Kendaraan" & "Bukti Bayar" jadi hyperlink yang bisa
+    // langsung diklik di Excel (buka foto/bukti bayar di browser).
+    const headers = Object.keys(rows[0] || {});
+    const colFoto = headers.indexOf("Foto Kendaraan");
+    const colBukti = headers.indexOf("Bukti Bayar (Tahun Dipilih)");
+
+    vehicleItems.forEach((it, i) => {
+      const rowIdx = i + 1; // baris 0 = header
+
+      if (colFoto !== -1 && it.photoBase64) {
+        const cellRef = window.XLSX.utils.encode_cell({ r: rowIdx, c: colFoto });
+        ws[cellRef] = {
+          t: "s",
+          v: "Lihat Foto",
+          l: { Target: it.photoBase64, Tooltip: "Klik untuk melihat foto kendaraan" },
+        };
+      }
+
+      const buktiUrl = it[`pajak_history.${pajakSelectedYear}`];
+      if (colBukti !== -1 && buktiUrl) {
+        const cellRef = window.XLSX.utils.encode_cell({ r: rowIdx, c: colBukti });
+        ws[cellRef] = {
+          t: "s",
+          v: "Lihat Bukti",
+          l: { Target: buktiUrl, Tooltip: "Klik untuk melihat bukti bayar" },
+        };
+      }
+    });
+
     const wb = window.XLSX.utils.book_new();
     window.XLSX.utils.book_append_sheet(wb, ws, "Data Pajak Kendaraan");
     window.XLSX.writeFile(
@@ -5100,6 +5361,7 @@ const processSaveVehicle = async (vehicleData) => {
           show={vehicleModal.show}
           initialData={vehicleModal.item}
           statusLoading={status.loading}
+          adminPassword={VEHICLE_EDIT_PASSWORD}
           onClose={() =>
               setVehicleModal({
                   show: false,
